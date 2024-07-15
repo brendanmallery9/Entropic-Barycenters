@@ -585,16 +585,44 @@ def doubly_benchmark_experiment(inner_trials,outer_trials):
 
 #Script
 
-A,B=benchmark_experiment(3,10,'Sinkhorn')
-np.save('sinkhorn_learn_vec',A)
-np.save('nn_learn_vec',B)
+sinkhorn_vec,nn_vec=benchmark_experiment(3,10,'Sinkhorn')
+np.save('sinkhorn_learn_vec',sinkhorn_vec)
+np.save('nn_learn_vec',nn_vec)
 
-C,D=benchmark_experiment(3,10,'Entropy')
-np.save('entropy_learn_vec',C)
+entropy_vec,nn_vec=benchmark_experiment(3,10,'Entropy')
+np.save('entropy_learn_vec',entropy_vec)
 
-E,F=benchmark_experiment(3,10,'Unregularized')
-np.save('unreg_learn_vec',E)
+unreg_vec,nn_vec=benchmark_experiment(3,10,'Unregularized')
+np.save('unreg_learn_vec',unreg_vec)
 
-G,H=doubly_benchmark_experiment(3,10)
-np.save('dreg_learn_vec',G)
+dreg_vec,nn_vec=doubly_benchmark_experiment(3,10)
+np.save('dreg_learn_vec',dreg_vec)
+
+
+def means_and_confidence_intervals(vector_array,confidence_level):
+    inner_means=[]
+    for i in vector_array:
+        inner_means.append(np.mean(i,axis=0))
+    inner_means=np.array(inner_means)
+    errors=[]
+    outer_means=[]
+    all_data=[inner_means[:,0],inner_means[:,1],inner_means[:,2],inner_means[:,3],inner_means[:,4],inner_means[:,5]]
+    for i in all_data:
+        t_statistic, p_value = stats.ttest_1samp(i, np.mean(i))
+        sample_mean = np.mean(i)
+        outer_means.append(sample_mean)
+        sample_sem = stats.sem(i)
+        degrees_of_freedom = len(i) - 1
+        confidence_interval = stats.t.interval(confidence_level, degrees_of_freedom, sample_mean, sample_sem)
+        errors.append((confidence_interval[1]-confidence_interval[0])/2)
+    return outer_means,errors
+
+
+alpha=0.95
+sinkhorn_means,sinkhorn_errors=means_and_confidence_intervals(sinkhorn_vec,alpha)
+entropy_means,entropy_errors=means_and_confidence_intervals(entropy_vec,alpha)
+unreg_means,unreg_errors=means_and_confidence_intervals(unreg_vec,alpha)
+dreg_means,dreg_errors=means_and_confidence_intervals(dreg_vec,alpha)
+nn_means,nn_errors=means_and_confidence_intervals(nn_vec,alpha)
+
 
