@@ -6,28 +6,24 @@ from __future__ import division
 from __future__ import print_function
 
 class Base:
+    def __init__(self, lam, kernel, dtype):
+        self._lam = lam
+        self._kernel = kernel
+        self._coeff = None
+        self._kernel_hyperparams = None
+        self._samples = None
+        self._dtype = dtype
 
-    def __init__(self, kernel_type, kernel_hyperparams, heuristic_hyperparams):
-        if kernel_hyperparams is not None:
-            heuristic_hyperparams = lambda x, y: kernel_hyperparams
-        self._kernel_type = kernel_type
-        self._heuristic_hyperparams = heuristic_hyperparams
+    def fit(self, samples, kernel_hyperparams):
+        raise NotImplementedError('Not implemented score estimator!')
 
-    def kernel_type(self):
-        return self._kernel_type
+    def compute_gradients(self, x):
+        raise NotImplementedError('Not implemented score estimator!')
 
-    def heuristic_hyperparams(self, x, y):
-        return self._heuristic_hyperparams(x, y)
+    def compute_energy(self, x):
+        if self._kernel.kernel_type() != 'curl-free':
+            raise RuntimeError('Only curl-free kernels have well-defined energy.')
+        return self._compute_energy(x)
 
-    def kernel_operator(self, x, y, kernel_hyperparams, **kwargs):
-        pass
-
-    def kernel_matrix(self, x, y, kernel_hyperparams=None, flatten=True, compute_divergence=True):
-        if compute_divergence:
-            op, divergence = self.kernel_operator(x, y,
-                    compute_divergence=True, 
-                    kernel_hyperparams=kernel_hyperparams)
-            return op.kernel_matrix(flatten), divergence
-        op = self.kernel_operator(x, y, compute_divergence=False,
-                kernel_hyperparams=kernel_hyperparams)
-        return op.kernel_matrix(flatten)
+    def _compute_energy(self, x):
+        raise NotImplementedError('Not implemented score estimator!')

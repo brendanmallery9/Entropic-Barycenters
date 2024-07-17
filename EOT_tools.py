@@ -36,9 +36,8 @@ import numpy as np
 import tensorflow as tf
 import torch.nn.functional as F
 import torch.nn.init as init  # Import the init module
-from kscore.estimators import *
 from kscore.kernels import *
-
+from kscore.estimators import *
 
 class labeled_data:
     def __init__(self,data,labels):
@@ -554,8 +553,8 @@ def doubly_reg_analysis_noise(reference_measure_points,base_measure_points,inner
     l2norms=[]
     for p in np.arange(len(entmap_list)):
         for q in np.arange(len(entmap_list)):
-            T_p=base_measure_points-entmap_list[p]-grad
-            T_q=base_measure_points-entmap_list[q]-grad
+            T_p=base_measure_points-entmap_list[p]+grad
+            T_q=base_measure_points-entmap_list[q]+grad
             dotvec=[]
             for k in np.arange(len(T_p)):
                 innerprod=np.dot(T_p[k],T_q[k])
