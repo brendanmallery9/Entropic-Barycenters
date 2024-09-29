@@ -2,6 +2,7 @@ import os
 import sys
 import numpy as np
 import random
+import time
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
@@ -43,21 +44,19 @@ random.seed = 1
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 label_obj_dict={0:'plane',2:'bed', 17:'guitar', 22:'television',37:'vases'}
 label_list=[0,2,17,22,37]
-
 ordered_labels={0:0,2:1,17:2,22:3,37:4}
 invert_ordered={0:0,1:2,2:17,3:22,4:37}
-
 
 pointnet = PointNet()
 pointnet.to(device);
 optimizer = torch.optim.Adam(pointnet.parameters(), lr=0.0002)
+
 
 class entry:
     def __init__(self,labels,data,coefficients):
         self.labels=labels
         self.data=data
         self.coefficients=coefficients
-
 
 def get_labels(obj):
     return obj.labels
@@ -78,10 +77,21 @@ def split(input_list, size1, size2):
 
 def apply_permutation(input_list, permutation):
     if len(input_list) != len(permutation):
-        raise ValueError("Input list and permutation must be of the same length")
-    
+        raise ValueError("Input list and permutation must be of the same length") 
     return [input_list[i] for i in permutation]
 
+class labeled_data():
+    def __init__(self,data,labels):
+        self.data=data
+        self.labels=labels
+
+def map_labels(labels,dictionary):
+    new_labels=[]
+    for i in labels:
+        new_labels.append(dictionary[int(i[0])])
+    return np.array(new_labels)
+
+#Data Preprocessing
 
 with h5py.File('pointcloud-c/clean.h5', 'r') as f:
     clean_data_file = f['data'] 
@@ -102,68 +112,6 @@ for i in reduced_data_indices:
     reduced_labeled_data.append(np.array(A))
 reduced_labeled_data=np.array(reduced_labeled_data)
 batch_list=np.transpose(reduced_labeled_data)
-
-
-class labeled_data():
-    def __init__(self,data,labels):
-        self.data=data
-        self.labels=labels
-
-def map_labels(labels,dictionary):
-    new_labels=[]
-    for i in labels:
-        new_labels.append(dictionary[int(i[0])])
-    return np.array(new_labels)
-
-
-
-pointnet = PointNet()
-pointnet.to(device);
-optimizer = torch.optim.Adam(pointnet.parameters(), lr=0.0002)
-
-
-def train(model,batchlist, val_loader=None,  epochs=4):
-    for epoch in range(epochs): 
-        pointnet.train()
-        running_loss = 0.0
-        for i, data in enumerate(batchlist, 0):
-            shuffled_batch=np.random.permutation(batchlist[i])
-            point_list=[]
-            label_list=[]
-            for pointcloud in shuffled_batch:
-                point_list.append(pointcloud.data)
-                label_list.append(pointcloud.labels)
-            point_list=np.array(point_list)
-            point_list=np.transpose(point_list,(0,2,1))
-            label_list=np.array(label_list)
-            label_list=map_labels(label_list,ordered_labels)
-            inputs, labels = torch.from_numpy(point_list).to(device).float(), torch.from_numpy(label_list).to(device)
-            optimizer.zero_grad()
-            outputs, m3x3, m64x64 = pointnet(inputs)
-            loss = pointnetloss(outputs, labels.squeeze(), m3x3, m64x64)
-            loss.backward()
-            optimizer.step()
-            running_loss += loss.item()
-            if i % 5 == 4:   
-                print('[Epoch: %d, Batch: %4d / %4d], loss: %.3f' %
-                    (epoch + 1, i + 1, len(batchlist), running_loss / 10))
-                running_loss = 0.0
-        pointnet.eval()
-        correct = total = 0
-
-        # validation
-        if val_loader:
-            with torch.no_grad():
-                for data in val_loader:
-                    inputs, labels = data['pointcloud'].to(device).float(), data['category'].to(device)
-                    outputs, __, __ = pointnet(inputs.transpose(1,2))
-                    _, predicted = torch.max(outputs.data, 1)
-                    total += labels.size(0)
-                    correct += (predicted == labels).sum().item()
-            val_acc = 100. * correct / total
-            print('Valid accuracy: %d %%' % val_acc)
-            
-device = torch.device("cpu")
 
 with h5py.File('pointcloud-c/dropout_local_1.h5', 'r') as f:
     corrupted_data_file = f['data'] 
@@ -291,6 +239,48 @@ add_local_batches=np.transpose(reduced_labeled_data)
 corrupted_batchlist=np.array([dropout_local_1_batches,dropout_local_2_batches,dropout_global_batches,jitter_batches,add_local_batches])
 corrupted_batchlist = corrupted_batchlist.transpose((0, 2, 1))
 
+#NN utilities
+
+def train(model,batchlist, val_loader=None,  epochs=4):
+    for epoch in range(epochs): 
+        pointnet.train()
+        running_loss = 0.0
+        for i, data in enumerate(batchlist, 0):
+            shuffled_batch=np.random.permutation(batchlist[i])
+            point_list=[]
+            label_list=[]
+            for pointcloud in shuffled_batch:
+                point_list.append(pointcloud.data)
+                label_list.append(pointcloud.labels)
+            point_list=np.array(point_list)
+            point_list=np.transpose(point_list,(0,2,1))
+            label_list=np.array(label_list)
+            label_list=map_labels(label_list,ordered_labels)
+            inputs, labels = torch.from_numpy(point_list).to(device).float(), torch.from_numpy(label_list).to(device)
+            optimizer.zero_grad()
+            outputs, m3x3, m64x64 = pointnet(inputs)
+            loss = pointnetloss(outputs, labels.squeeze(), m3x3, m64x64)
+            loss.backward()
+            optimizer.step()
+            running_loss += loss.item()
+            if i % 5 == 4:   
+                print('[Epoch: %d, Batch: %4d / %4d], loss: %.3f' %
+                    (epoch + 1, i + 1, len(batchlist), running_loss / 10))
+                running_loss = 0.0
+        pointnet.eval()
+        correct = total = 0
+        # validation
+        if val_loader:
+            with torch.no_grad():
+                for data in val_loader:
+                    inputs, labels = data['pointcloud'].to(device).float(), data['category'].to(device)
+                    outputs, __, __ = pointnet(inputs.transpose(1,2))
+                    _, predicted = torch.max(outputs.data, 1)
+                    total += labels.size(0)
+                    correct += (predicted == labels).sum().item()
+            val_acc = 100. * correct / total
+            print('Valid accuracy: %d %%' % val_acc)
+
 def compute_accuracy(pred_labels, true_labels):
     assert len(pred_labels) == len(true_labels), "Length of predicted labels and true labels must be the same."
 
@@ -334,6 +324,7 @@ def reset_weights(model):
 
 
 def benchmark_trial(data,corrupted_batches,m,regularization,inner_trials,functional):
+    time_vec=[]
     data=np.transpose(data)
     train_data=[]
     test_data=[]
@@ -384,6 +375,7 @@ def benchmark_trial(data,corrupted_batches,m,regularization,inner_trials,functio
   #Wass learning
     big_wass_learning_vec=[]
     for trial in np.arange(inner_trials):
+        start_time = time.time()
         test_entry_list=[]
         for corr_batch in corrupted_test_data:
             corr_test_entry_list=[]
@@ -419,6 +411,9 @@ def benchmark_trial(data,corrupted_batches,m,regularization,inner_trials,functio
             wass_learning_results=1-np.mean(score_results(list(learned_entries),sorted_references))
             small_wass_learning_vec.append(wass_learning_results)
         big_wass_learning_vec.append(small_wass_learning_vec)
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        time_vec.append(elapsed_time)
         print(trial)
     #NN
     reset_weights(pointnet)
@@ -446,26 +441,108 @@ def benchmark_trial(data,corrupted_batches,m,regularization,inner_trials,functio
                 all_labels += list(labels.numpy())
             nn_results=compute_accuracy(all_preds,all_labels)
             nn_result_vec.append(nn_results)
-    return big_wass_learning_vec,nn_result_vec,train_data_points,test_data_points,train_data_labels,test_data_labels
+    return big_wass_learning_vec,nn_result_vec,time_vec,train_data_points,test_data_points,train_data_labels,test_data_labels
 
 def benchmark_experiment(inner_trials,outer_trials,functional):
+    reg=0.75
     wass_learning_vec=[]
     nn_learning_vec=[]
+    os.mkdir('{}_folder_{}'.format(functional,reg))
     for i in np.arange(outer_trials):
-        A,B,train_points,test_points,train_labels,test_labels=benchmark_trial(batch_list,corrupted_batchlist,3,0.089,inner_trials,functional)
+        A,B,time_vec,train_points,test_points,train_labels,test_labels=benchmark_trial(batch_list,corrupted_batchlist,3,reg,inner_trials,functional)
+        np.save('{}_folder_{}/wass_trial_{}'.format(functional,reg,i),A)
+        np.save('{}_folder_{}/nn_trial_{}'.format(functional,reg,i),B)
+        np.save('{}_folder_{}/time_vec_{}'.format(functional,reg,i),time_vec)
         wass_learning_vec.append(A)
         nn_learning_vec.append(B)
         print(i)
     return wass_learning_vec,nn_learning_vec
 
-
-
-
 ###########
 #Classification experiment using the doubly regularized functional
 #Score estimation relies on supplemental code to ``Nonparametric Score Estimation'' by Yuhao Zhou, Jiaxin Shi, Jun Zhu. https://github.com/miskcoo/kscore
+##### Doubly reg classification tools
+from kscore.kernels import *
+from kscore.estimators import *
+
+def add_isotropic_gaussian_noise(points, mean, std_dev):
+    noise = np.random.normal(loc=mean, scale=std_dev, size=points.shape)
+    noisy_points = points + noise
+    return noisy_points
+
+def score_estimate(data,kernel_width):
+    nu_estimator = NuMethod(lam=0.00001, kernel=CurlFreeIMQ())
+    estimator=nu_estimator
+    estimator.fit(data,kernel_hyperparams=kernel_width)
+    return estimator
+
+def grad_field(data,kernel_width,noise_stdv):
+    noised_data=add_isotropic_gaussian_noise(data,0.0,noise_stdv)
+    noised_data=tf.cast(noised_data,dtype=tf.float32)
+    estimator=score_estimate(noised_data,kernel_width)
+    score_field=estimator.compute_gradients(data)
+    return score_field
+
+def doubly_reg_analysis_noise(reference_measure_points,base_measure_points,inner_regularization,outer_regularization):
+    uniform_masses=np.dot(np.ones(len(base_measure_points)),1/len(base_measure_points))
+    base_measure=measure(base_measure_points,uniform_masses)
+    grad=grad_field(base_measure_points,5.0,0.05)
+    grad=np.dot(grad,outer_regularization)
+    reference_measures=[]
+    for i in reference_measure_points:
+        reference_mass=np.dot(np.ones(len(i)),1/len(i))
+        reference_meas=measure(i,reference_mass)
+        reference_measures.append(reference_meas)
+    entmap_list=[]
+    def process_reference_map(reference_measure):
+        g = get_potential(base_measure, reference_measure, inner_regularization)
+        extended = highdim_extended_map(g[1], base_measure, reference_measure, inner_regularization, 3)
+        return extended
+
+    entmap_list = Parallel(n_jobs=-1)(delayed(process_reference_map)(i) for i in reference_measures)
+    l2norms=[]
+    for p in np.arange(len(entmap_list)):
+        for q in np.arange(len(entmap_list)):
+            T_p=base_measure_points-entmap_list[p]+grad
+            T_q=base_measure_points-entmap_list[q]+grad
+            dotvec=[]
+            for k in np.arange(len(T_p)):
+                innerprod=np.dot(T_p[k],T_q[k])
+                dotvec.append(innerprod)
+            l2diff=np.dot(dotvec,uniform_masses)
+            l2norms.append(l2diff)
+    l2matrix=np.reshape(l2norms,(len(entmap_list),len(entmap_list)))
+    x=cp.Variable(len(entmap_list))
+    objective=cp.Minimize(cp.quad_form(x,l2matrix))
+    constraints=[x>=0,cp.sum(x)==1]
+    problem=cp.Problem(objective,constraints)
+    problem.solve()
+    optimal_x=x.value
+    return optimal_x
+
+def doubly_reg_build_coefficients_noise(list_of_entries,dictionary,inner_regularization,outer_regularization):
+    new_list=[]
+    dictionary_points_list=[]
+    counter=0
+    for atom in dictionary:
+        dictionary_points_list.append(atom.data)
+    for entr in list_of_entries:
+        counter=counter+1
+        print(counter)
+        coeff=doubly_reg_analysis_noise(dictionary_points_list,entr.data,inner_regularization,outer_regularization)
+        new_entry=entry(entr.labels,entr.data,coeff)
+        new_list.append(new_entry)
+    return new_list
+
+
+def doubly_reg_noise_dictionary_learn(list_of_entries,dictionary,inner_regularization,outer_regularization,m):
+    coefficients=doubly_reg_build_coefficients_noise(list_of_entries,dictionary,inner_regularization,outer_regularization)
+    processed_coefficients=combine_coefficients_list(coefficients,m)
+    return processed_coefficients
+
 
 def doubly_reg_benchmark_trial(data,corrupted_batches,m,inner_regularization,outer_regularization,inner_trials):
+    time_vec=[]
     data=np.transpose(data)
     train_data=[]
     test_data=[]
@@ -517,6 +594,7 @@ def doubly_reg_benchmark_trial(data,corrupted_batches,m,inner_regularization,out
     coefficient_vec=[]
     big_wass_learning_vec=[]
     for trial in np.arange(inner_trials):
+        start_time = time.time()
         test_entry_list=[]
         for corr_batch in corrupted_test_data:
             corr_test_entry_list=[]
@@ -542,6 +620,9 @@ def doubly_reg_benchmark_trial(data,corrupted_batches,m,inner_regularization,out
             small_wass_learning_vec.append(noise_learning_results)
         big_wass_learning_vec.append(small_wass_learning_vec)
         print(trial)
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        time_vec.append(elapsed_time)
     #NN
     reset_weights(pointnet)
     train(pointnet,np.transpose(train_data))
@@ -568,36 +649,38 @@ def doubly_reg_benchmark_trial(data,corrupted_batches,m,inner_regularization,out
                 all_labels += list(labels.numpy())
             nn_results=compute_accuracy(all_preds,all_labels)
             nn_result_vec.append(nn_results)
-    return big_wass_learning_vec,nn_result_vec,train_data_points,test_data_points,train_data_labels,test_data_labels,coefficient_vec
+    return big_wass_learning_vec,nn_result_vec,time_vec,train_data_points,test_data_points,train_data_labels,test_data_labels,coefficient_vec
 
 def doubly_benchmark_experiment(inner_trials,outer_trials):
     wass_learning_vec=[]
     nn_learning_vec=[]
+    os.mkdir('dreg_folder')
     for i in np.arange(outer_trials):
-        A,B,train_points,test_points,train_labels,test_labels,coefficient_vec=doubly_reg_benchmark_trial(batch_list,corrupted_batchlist,3,.009,0.01,inner_trials)
+        A,B,time_vec,train_points,test_points,train_labels,test_labels,coefficient_vec=doubly_reg_benchmark_trial(batch_list,corrupted_batchlist,3,.009,0.01,inner_trials)
         wass_learning_vec.append(A)
         nn_learning_vec.append(B)
+        np.save('dreg_folder/wass_trial_{}'.format(i),A)
+        np.save('dreg_folder/nn_trial_{}'.format(i),B)
+        np.save('dreg_folder/time_vec_{}'.format(i),time_vec)
         print(i)
     return wass_learning_vec,nn_learning_vec
 
 
 
-
 #Script
 
-sinkhorn_vec,nn_vec=benchmark_experiment(3,10,'Sinkhorn')
-np.save('sinkhorn_learn_vec',sinkhorn_vec)
-np.save('nn_learn_vec',nn_vec)
+sinkhorn_vec,nn_vec=benchmark_experiment(10,5,'Sinkhorn')
+#np.save('sinkhorn_learn_vec',sinkhorn_vec)
+#np.save('nn_learn_vec',nn_vec)
 
-entropy_vec,nn_vec=benchmark_experiment(3,10,'Entropy')
-np.save('entropy_learn_vec',entropy_vec)
+entropy_vec,nn_vec=benchmark_experiment(10,5,'Entropy')
+#np.save('entropy_learn_vec',entropy_vec)
 
-unreg_vec,nn_vec=benchmark_experiment(3,10,'Unregularized')
-np.save('unreg_learn_vec',unreg_vec)
+unreg_vec,nn_vec=benchmark_experiment(10,5,'Unregularized')
+#np.save('unreg_learn_vec',unreg_vec)
 
-dreg_vec,nn_vec=doubly_benchmark_experiment(3,10)
-np.save('dreg_learn_vec',dreg_vec)
-
+dreg_vec,nn_vec=doubly_benchmark_experiment(10,5)
+#np.save('dreg_learn_vec',dreg_vec)
 
 def means_and_confidence_intervals(vector_array,confidence_level):
     inner_means=[]
@@ -619,6 +702,7 @@ def means_and_confidence_intervals(vector_array,confidence_level):
 
 
 alpha=0.95
+
 sinkhorn_means,sinkhorn_errors=means_and_confidence_intervals(sinkhorn_vec,alpha)
 entropy_means,entropy_errors=means_and_confidence_intervals(entropy_vec,alpha)
 unreg_means,unreg_errors=means_and_confidence_intervals(unreg_vec,alpha)

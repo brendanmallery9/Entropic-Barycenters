@@ -36,8 +36,6 @@ import numpy as np
 import tensorflow as tf
 import torch.nn.functional as F
 import torch.nn.init as init  # Import the init module
-from kscore.kernels import *
-from kscore.estimators import *
 
 class labeled_data:
     def __init__(self,data,labels):
@@ -161,6 +159,15 @@ def highdim_extended_map(potential,source,target,epsilon,dim):
     J=np.divide(unnormalized_map,normalization)
     return J
 
+def barycenter_functional(source_points,reference_points,weights,epsilon):
+    cost_vec=[]
+    masses=np.dot(1/len(source_points),np.ones(len(source_points)))
+    for i in reference_points:
+        M=np.power(euclidean_distances(source_points,i_points),2)
+        cost=ot.sinkhorn2(masses,masses,M,epsilon)
+        cost_vec.append(cost)
+    score=np.dot(np.array(weights),np.array(cost_vec))
+    return score
 
 
 def analysis(reference_measure_points,base_measure_points,regularization):
@@ -239,7 +246,47 @@ def sink_analysis(reference_measure_points,base_measure_points,regularization):
     optimal_x=x.value
     return optimal_x
 
+def entropic_synthesis(regularization,reference_measures,base_measure,weight_vec,stepsize,iterations):
+    ref_1=reference_measures[0]
+    ref_2=reference_measures[1]
+    ref_3=reference_measures[2]
+    dim=len(base_measure.points[0])
+    initial_masses=base_measure.masses
+    source_measure=base_measure
+    for i in np.arange(iterations):
+        if i%10==0:
+            print(i)
+        combined_entmap=np.zeros((len(source_measure.points),dim))
+        for j in np.arange(len(reference_measures)):
+            g = get_potential(base_measure, j, regularization)
+            entmap = highdim_extended_map(g[1], base_measure, j, regularization, 3)
+            scaled_entmap=np.dot(weight_vec[j],entmap)
+            combined_entmap=combined_entmap+scaled_entmap
+        update_source_points=np.dot((1-stepsize),source_measure.points)+np.dot(stepsize,combined_entmap)
+        source_measure=measure(update_source_points,initial_masses)
+    return source_measure
 
+def sinkhorn_synthesis(regularization,reference_measures,base_measure,weight_vec,stepsize,iterations):
+    ref_1=reference_measures[0]
+    ref_2=reference_measures[1]
+    ref_3=reference_measures[2]
+    dim=len(base_measure.points[0])
+    initial_masses=base_measure.masses
+    source_measure=base_measure
+    for i in np.arange(iterations):
+        if i%10==0:
+            print(i)
+        combined_entmap=np.zeros((len(source_measure.points),dim))
+        for j in np.arange(len(reference_measures)):
+            g = get_potential(base_measure, j, regularization)
+            entmap = highdim_extended_map(g[1], base_measure, j, regularization, dim)
+            scaled_entmap=np.dot(weight_vec[j],entmap)
+            combined_entmap=combined_entmap+scaled_entmap
+        self_potential = get_potential(base_measure, base_measure, regularization)
+        self_map = highdim_extended_map(self_potential[1], base_measure, base_measure, regularization, dim)
+        update_source_points=source_measure.points-np.dot(stepsize,self_map)+np.dot(stepsize,combined_entmap)
+        source_measure=measure(update_source_points,initial_masses)
+    return source_measure
 ####Classification tools
 
 def find_indices(numbers, target):
@@ -512,82 +559,5 @@ def tangent_dictionary_learn(list_of_entries,dictionary,m):
     processed_coefficients=combine_coefficients_list(coefficients,m)
     return processed_coefficients
 
-
-##### Doubly reg classification tools
-
-def add_isotropic_gaussian_noise(points, mean, std_dev):
-    noise = np.random.normal(loc=mean, scale=std_dev, size=points.shape)
-    noisy_points = points + noise
-    return noisy_points
-
-def score_estimate(data,kernel_width):
-    nu_estimator = NuMethod(lam=0.00001, kernel=CurlFreeIMQ())
-    estimator=nu_estimator
-    estimator.fit(data,kernel_hyperparams=kernel_width)
-    return estimator
-
-def grad_field(data,kernel_width,noise_stdv):
-    noised_data=add_isotropic_gaussian_noise(data,0.0,noise_stdv)
-    noised_data=tf.cast(noised_data,dtype=tf.float32)
-    estimator=score_estimate(noised_data,kernel_width)
-    score_field=estimator.compute_gradients(data)
-    return score_field
-
-def doubly_reg_analysis_noise(reference_measure_points,base_measure_points,inner_regularization,outer_regularization):
-    uniform_masses=np.dot(np.ones(len(base_measure_points)),1/len(base_measure_points))
-    base_measure=measure(base_measure_points,uniform_masses)
-    grad=grad_field(base_measure_points,5.0,0.05)
-    grad=np.dot(grad,outer_regularization)
-    reference_measures=[]
-    for i in reference_measure_points:
-        reference_mass=np.dot(np.ones(len(i)),1/len(i))
-        reference_meas=measure(i,reference_mass)
-        reference_measures.append(reference_meas)
-    entmap_list=[]
-    def process_reference_map(reference_measure):
-        g = get_potential(base_measure, reference_measure, inner_regularization)
-        extended = highdim_extended_map(g[1], base_measure, reference_measure, inner_regularization, 3)
-        return extended
-
-    entmap_list = Parallel(n_jobs=-1)(delayed(process_reference_map)(i) for i in reference_measures)
-    l2norms=[]
-    for p in np.arange(len(entmap_list)):
-        for q in np.arange(len(entmap_list)):
-            T_p=base_measure_points-entmap_list[p]+grad
-            T_q=base_measure_points-entmap_list[q]+grad
-            dotvec=[]
-            for k in np.arange(len(T_p)):
-                innerprod=np.dot(T_p[k],T_q[k])
-                dotvec.append(innerprod)
-            l2diff=np.dot(dotvec,uniform_masses)
-            l2norms.append(l2diff)
-    l2matrix=np.reshape(l2norms,(len(entmap_list),len(entmap_list)))
-    x=cp.Variable(len(entmap_list))
-    objective=cp.Minimize(cp.quad_form(x,l2matrix))
-    constraints=[x>=0,cp.sum(x)==1]
-    problem=cp.Problem(objective,constraints)
-    problem.solve()
-    optimal_x=x.value
-    return optimal_x
-
-def doubly_reg_build_coefficients_noise(list_of_entries,dictionary,inner_regularization,outer_regularization):
-    new_list=[]
-    dictionary_points_list=[]
-    counter=0
-    for atom in dictionary:
-        dictionary_points_list.append(atom.data)
-    for entr in list_of_entries:
-        counter=counter+1
-        print(counter)
-        coeff=doubly_reg_analysis_noise(dictionary_points_list,entr.data,inner_regularization,outer_regularization)
-        new_entry=entry(entr.labels,entr.data,coeff)
-        new_list.append(new_entry)
-    return new_list
-
-
-def doubly_reg_noise_dictionary_learn(list_of_entries,dictionary,inner_regularization,outer_regularization,m):
-    coefficients=doubly_reg_build_coefficients_noise(list_of_entries,dictionary,inner_regularization,outer_regularization)
-    processed_coefficients=combine_coefficients_list(coefficients,m)
-    return processed_coefficients
 
 
