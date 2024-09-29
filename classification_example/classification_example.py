@@ -41,17 +41,25 @@ random.seed = 1
 
 #Data processing
 
+#Identifying labels for point cloud types in pointcloud-c used in the main paper.
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 label_obj_dict={0:'plane',2:'bed', 17:'guitar', 22:'television',37:'vases'}
 label_list=[0,2,17,22,37]
 ordered_labels={0:0,2:1,17:2,22:3,37:4}
 invert_ordered={0:0,1:2,2:17,3:22,4:37}
-
 pointnet = PointNet()
 pointnet.to(device);
 optimizer = torch.optim.Adam(pointnet.parameters(), lr=0.0002)
 
 
+#Class for labeled pointcloud data. ''data'' is array of 3D arrays, ''labels'' is an integer.
+class labeled_data():
+    def __init__(self,data,labels):
+        self.data=data
+        self.labels=labels
+
+#Class for dictionary entries. ''data'' is array of 3D arrays, labels is an integer, ''coefficients'' is a probability vector with length= # reference pointclouds.
 class entry:
     def __init__(self,labels,data,coefficients):
         self.labels=labels
@@ -60,19 +68,15 @@ class entry:
 
 def get_labels(obj):
     return obj.labels
-
 def split(input_list, size1, size2):
     if size1 + size2 != len(input_list):
         raise ValueError("Sizes do not match the length of the input list")
-    
     shuffled_list = input_list.copy()
     permutation = list(range(len(shuffled_list)))
     random.shuffle(permutation)
     shuffled_list = [shuffled_list[i] for i in permutation]
-    
     list1 = shuffled_list[:size1]
     list2 = shuffled_list[size1:]
-    
     return list1, list2, permutation
 
 def apply_permutation(input_list, permutation):
@@ -80,10 +84,6 @@ def apply_permutation(input_list, permutation):
         raise ValueError("Input list and permutation must be of the same length") 
     return [input_list[i] for i in permutation]
 
-class labeled_data():
-    def __init__(self,data,labels):
-        self.data=data
-        self.labels=labels
 
 def map_labels(labels,dictionary):
     new_labels=[]
@@ -92,6 +92,10 @@ def map_labels(labels,dictionary):
     return np.array(new_labels)
 
 #Data Preprocessing
+
+#Each block converts a list of pointclouds, indexed by ''label_list'', to ''labeled_data'' objects. 
+#The pointcloud corruptions are (in order): dropout_local_1, dropout_local_2, dropout_global_4, dropout_jitter_4, and add_global_4
+#The processed ''clean'' pointclodus are stored in ''batch_list''. The corrupted pointclouds are stored in ''corrupted_batch_list''.
 
 with h5py.File('pointcloud-c/clean.h5', 'r') as f:
     clean_data_file = f['data'] 
@@ -239,7 +243,7 @@ add_local_batches=np.transpose(reduced_labeled_data)
 corrupted_batchlist=np.array([dropout_local_1_batches,dropout_local_2_batches,dropout_global_batches,jitter_batches,add_local_batches])
 corrupted_batchlist = corrupted_batchlist.transpose((0, 2, 1))
 
-#NN utilities
+#NN utilities: Functions for training pointnet.
 
 def train(model,batchlist, val_loader=None,  epochs=4):
     for epoch in range(epochs): 
@@ -319,13 +323,16 @@ def reset_weights(model):
                 init.constant_(m.bias, 0)
     model.apply(weights_init)
 
+
 ######
 #Classification experiment using Sinkhorn, entropy-regularized and unregularized functionals
-
+#For ''benchmark_trial'', data=''batchlist'', corrupted_batches=''corrupted_batchlist'', m= # reference pointclouds
+#functional can either be "Entropy", "Sinkhorn" or "Unregularized".
 
 def benchmark_trial(data,corrupted_batches,m,regularization,inner_trials,functional):
     time_vec=[]
     data=np.transpose(data)
+    #Split data into train and test sets (80 train, 20 test for each class of pointclouds). m reference point clouds are selected from the training data
     train_data=[]
     test_data=[]
     for i in data:
@@ -340,6 +347,7 @@ def benchmark_trial(data,corrupted_batches,m,regularization,inner_trials,functio
         for j in i:
             type_bin.append(j.data)
         train_data_points.append(type_bin)
+    #Label arrays for training and test sets are constructed.
     train_data_labels=[]
     for i in train_data:
         type_bin=[]
@@ -358,6 +366,7 @@ def benchmark_trial(data,corrupted_batches,m,regularization,inner_trials,functio
         for j in i:
             type_bin.append(j.labels)
         test_data_labels.append(type_bin)
+    #Corrupted point cloud test arrays are constructed. 
     corrupted_data=corrupted_batches
     corrupted_test_data=[]
     for corr_batch in corrupted_data:
@@ -372,11 +381,14 @@ def benchmark_trial(data,corrupted_batches,m,regularization,inner_trials,functio
     corrupted_test_data_copy=corrupted_test_data.copy()
     corrupted_test_data_copy=np.array(corrupted_test_data_copy).transpose(0,2,1)
     corrupted_test_data=np.reshape(corrupted_test_data,(6,100))
-  #Wass learning
+    
+    #Barycentric coding classification
+
     big_wass_learning_vec=[]
     for trial in np.arange(inner_trials):
         start_time = time.time()
         test_entry_list=[]
+        #Convert "labeled_data" objects to "entry" objects, default coefficient set to 0. 
         for corr_batch in corrupted_test_data:
             corr_test_entry_list=[]
             for pointcloud in corr_batch:
@@ -386,6 +398,7 @@ def benchmark_trial(data,corrupted_batches,m,regularization,inner_trials,functio
                 new_entry=entry(label,points,coefs)
                 corr_test_entry_list.append(new_entry)
             test_entry_list.append(corr_test_entry_list)
+
         references=[]
         for i in train_data:
             sampled_ref=random.sample(list(i),k=m)
@@ -394,6 +407,7 @@ def benchmark_trial(data,corrupted_batches,m,regularization,inner_trials,functio
         sorted_references = sorted(reference_list, key=get_labels)
         small_wass_learning_vec=[]
         counter=0
+
         for i in corrupted_test_data:
             counter=counter+1
             #Sinkhorn functional
@@ -415,7 +429,9 @@ def benchmark_trial(data,corrupted_batches,m,regularization,inner_trials,functio
         elapsed_time = end_time - start_time
         time_vec.append(elapsed_time)
         print(trial)
-    #NN
+
+    #NN classification using PointNet
+
     reset_weights(pointnet)
     train(pointnet,np.transpose(train_data))
     pointnet.eval()
@@ -469,12 +485,15 @@ def add_isotropic_gaussian_noise(points, mean, std_dev):
     noisy_points = points + noise
     return noisy_points
 
+#Estimates the score function for a given pointcloud. 
+#Different estimators and kernels can be chosen, see kscore/estimators and kscore/kernels for details. 
 def score_estimate(data,kernel_width):
     nu_estimator = NuMethod(lam=0.00001, kernel=CurlFreeIMQ())
     estimator=nu_estimator
     estimator.fit(data,kernel_hyperparams=kernel_width)
     return estimator
 
+#grad_field perturbs the data with isotropic gaussian noise of a given standard deviation, and then estimates the score function of the perturbed data.
 def grad_field(data,kernel_width,noise_stdv):
     noised_data=add_isotropic_gaussian_noise(data,0.0,noise_stdv)
     noised_data=tf.cast(noised_data,dtype=tf.float32)
@@ -482,6 +501,8 @@ def grad_field(data,kernel_width,noise_stdv):
     score_field=estimator.compute_gradients(data)
     return score_field
 
+#doubly-reg_analysis_noise computes the barycentric coding coefficient vector for a given array of points (base_measure_points) and reference measure points. 
+#Our choice of inner_regularization=0.01 and outer_regularization=0.009. See https://arxiv.org/pdf/2303.11844 for details.
 def doubly_reg_analysis_noise(reference_measure_points,base_measure_points,inner_regularization,outer_regularization):
     uniform_masses=np.dot(np.ones(len(base_measure_points)),1/len(base_measure_points))
     base_measure=measure(base_measure_points,uniform_masses)
@@ -497,7 +518,7 @@ def doubly_reg_analysis_noise(reference_measure_points,base_measure_points,inner
         g = get_potential(base_measure, reference_measure, inner_regularization)
         extended = highdim_extended_map(g[1], base_measure, reference_measure, inner_regularization, 3)
         return extended
-
+    
     entmap_list = Parallel(n_jobs=-1)(delayed(process_reference_map)(i) for i in reference_measures)
     l2norms=[]
     for p in np.arange(len(entmap_list)):
@@ -519,6 +540,7 @@ def doubly_reg_analysis_noise(reference_measure_points,base_measure_points,inner
     optimal_x=x.value
     return optimal_x
 
+#doubly_reg_build_coefficients_noise updates a list of ''entry'' objects by changing their coefficients to barycentric coding coefficients for a given set of labeled reference point clouds (''dictionary'').
 def doubly_reg_build_coefficients_noise(list_of_entries,dictionary,inner_regularization,outer_regularization):
     new_list=[]
     dictionary_points_list=[]
@@ -532,7 +554,6 @@ def doubly_reg_build_coefficients_noise(list_of_entries,dictionary,inner_regular
         new_entry=entry(entr.labels,entr.data,coeff)
         new_list.append(new_entry)
     return new_list
-
 
 def doubly_reg_noise_dictionary_learn(list_of_entries,dictionary,inner_regularization,outer_regularization,m):
     coefficients=doubly_reg_build_coefficients_noise(list_of_entries,dictionary,inner_regularization,outer_regularization)
