@@ -443,8 +443,7 @@ def benchmark_trial(data,corrupted_batches,m,regularization,inner_trials,functio
             nn_result_vec.append(nn_results)
     return big_wass_learning_vec,nn_result_vec,time_vec,train_data_points,test_data_points,train_data_labels,test_data_labels
 
-def benchmark_experiment(inner_trials,outer_trials,functional):
-    reg=0.75
+def benchmark_experiment(inner_trials,outer_trials,functional,reg):
     wass_learning_vec=[]
     nn_learning_vec=[]
     os.mkdir('{}_folder_{}'.format(functional,reg))
@@ -651,12 +650,12 @@ def doubly_reg_benchmark_trial(data,corrupted_batches,m,inner_regularization,out
             nn_result_vec.append(nn_results)
     return big_wass_learning_vec,nn_result_vec,time_vec,train_data_points,test_data_points,train_data_labels,test_data_labels,coefficient_vec
 
-def doubly_benchmark_experiment(inner_trials,outer_trials):
+def doubly_benchmark_experiment(inner_trials,outer_trials,inner_reg,outer_reg):
     wass_learning_vec=[]
     nn_learning_vec=[]
     os.mkdir('dreg_folder')
     for i in np.arange(outer_trials):
-        A,B,time_vec,train_points,test_points,train_labels,test_labels,coefficient_vec=doubly_reg_benchmark_trial(batch_list,corrupted_batchlist,3,.009,0.01,inner_trials)
+        A,B,time_vec,train_points,test_points,train_labels,test_labels,coefficient_vec=doubly_reg_benchmark_trial(batch_list,corrupted_batchlist,3,inner_reg,outer_reg,inner_trials)
         wass_learning_vec.append(A)
         nn_learning_vec.append(B)
         np.save('dreg_folder/wass_trial_{}'.format(i),A)
@@ -669,17 +668,31 @@ def doubly_benchmark_experiment(inner_trials,outer_trials):
 
 #Script
 
-sinkhorn_vec,nn_vec=benchmark_experiment(10,5,'Sinkhorn')
+loweps_sinkhorn_vec,nn_vec=benchmark_experiment(10,5,'Sinkhorn',0.009)
 #np.save('sinkhorn_learn_vec',sinkhorn_vec)
 #np.save('nn_learn_vec',nn_vec)
 
-entropy_vec,nn_vec=benchmark_experiment(10,5,'Entropy')
+loweps_entropy_vec,nn_vec=benchmark_experiment(10,5,'Entropy',0.009)
+#np.save('entropy_learn_vec',entropy_vec)
+
+mideps_sinkhorn_vec,nn_vec=benchmark_experiment(10,5,'Sinkhorn',0.089)
+#np.save('sinkhorn_learn_vec',sinkhorn_vec)
+#np.save('nn_learn_vec',nn_vec)
+
+mideps_entropy_vec,nn_vec=benchmark_experiment(10,5,'Entropy',0.089)
+#np.save('entropy_learn_vec',entropy_vec)
+
+higheps_sinkhorn_vec,nn_vec=benchmark_experiment(10,5,'Sinkhorn',0.75)
+#np.save('sinkhorn_learn_vec',sinkhorn_vec)
+#np.save('nn_learn_vec',nn_vec)
+
+higheps_entropy_vec,nn_vec=benchmark_experiment(10,5,'Entropy',0.75)
 #np.save('entropy_learn_vec',entropy_vec)
 
 unreg_vec,nn_vec=benchmark_experiment(10,5,'Unregularized')
 #np.save('unreg_learn_vec',unreg_vec)
 
-dreg_vec,nn_vec=doubly_benchmark_experiment(10,5)
+dreg_vec,nn_vec=doubly_benchmark_experiment(10,5,0.009,0.01)
 #np.save('dreg_learn_vec',dreg_vec)
 
 def means_and_confidence_intervals(vector_array,confidence_level):
@@ -703,8 +716,12 @@ def means_and_confidence_intervals(vector_array,confidence_level):
 
 alpha=0.95
 
-sinkhorn_means,sinkhorn_errors=means_and_confidence_intervals(sinkhorn_vec,alpha)
-entropy_means,entropy_errors=means_and_confidence_intervals(entropy_vec,alpha)
+loweps_sinkhorn_means,loweps_sinkhorn_errors=means_and_confidence_intervals(loweps_sinkhorn_vec,alpha)
+loweps_entropy_means,loweps_entropy_errors=means_and_confidence_intervals(loweps_entropy_vec,alpha)
+mideps_sinkhorn_means,mideps_sinkhorn_errors=means_and_confidence_intervals(mideps_sinkhorn_vec,alpha)
+mideps_entropy_means,mideps_entropy_errors=means_and_confidence_intervals(mideps_entropy_vec,alpha)
+higheps_sinkhorn_means,higheps_sinkhorn_errors=means_and_confidence_intervals(higheps_sinkhorn_vec,alpha)
+higheps_entropy_means,higheps_entropy_errors=means_and_confidence_intervals(higheps_entropy_vec,alpha)
 unreg_means,unreg_errors=means_and_confidence_intervals(unreg_vec,alpha)
 dreg_means,dreg_errors=means_and_confidence_intervals(dreg_vec,alpha)
 nn_means,nn_errors=means_and_confidence_intervals(nn_vec,alpha)
