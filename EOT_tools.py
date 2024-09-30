@@ -37,17 +37,19 @@ import tensorflow as tf
 import torch.nn.functional as F
 import torch.nn.init as init  # Import the init module
 
-class labeled_data:
+#Class for labeled pointcloud data. ''data'' is array of 3D arrays, ''labels'' is an integer.
+class labeled_data():
     def __init__(self,data,labels):
         self.data=data
         self.labels=labels
 
+#Class for probability measure. ''Points'' is array of d-dimensional arrays, 'masses'' is array of nonnegative scalars of the same length, adding up to one. 
 class measure:
     def __init__(self,points,masses):
         self.points=points
         self.masses=masses
 
-
+#Produces an empirical measure by sampling from the input_measure
 def empirical_measure(input_measure,samples):
     points=input_measure.points
     masses=input_measure.masses
@@ -58,7 +60,6 @@ def empirical_measure(input_measure,samples):
         empirical_support.append(points[i])
     output=measure(empirical_support,uniform_mass)
     return output
-
 
 def sample_with_replacement(lst, sample_size):
     sample = [random.choice(lst) for _ in range(sample_size)]
@@ -72,6 +73,7 @@ def sample_array(array,samples):
         sample_list.append(array[i])
     return sample_list
 
+#Computes the extended entropic map (see Theorem 2.2 in the main paper) between one-dimensional probability measures.
 def onedim_extended_map(potential,source,target,epsilon):
     source_points=source.points
     target_points=target.points
@@ -86,7 +88,7 @@ def onedim_extended_map(potential,source,target,epsilon):
     J=np.divide(unnormalized_map,normalization)
     return J
 
-
+#Randomly samples a rotation matrix 
 def random_rotation_matrix(n):
     random_matrix = np.random.rand(n, n)
     q, r = np.linalg.qr(random_matrix)
@@ -95,18 +97,29 @@ def random_rotation_matrix(n):
     q *= ph
     return q
 
+#Random samples a PSD matrix with entries between [low,high]. Increasing ''alpha'' improves the condition number.
+def randcov(low,high,dim,alpha):
+    A = np.random.uniform(low,high,(dim, dim))
+    B = A @ A.T + alpha*np.eye(dim)
+    rotation_matrix, _ = np.linalg.qr(np.random.randn(dim, dim))
+    composed_matrix = rotation_matrix @ B @ rotation_matrix.T
+    return composed_matrix
+
+#Randomly samples a probability vector of length ''size''.
 def random_weights(size):
     vec=np.random.rand(size)
     total=sum(vec)
     normalized=np.dot(vec,1/total)
     return normalized
 
+#Randomly produces a vector of length ''size'' with entries in [low,high].
 def random_vec(size,low,high):
     vec=np.random.uniform(low,high,size)
     mat=random_rotation_matrix(size)
     rot_vec=mat@vec
     return rot_vec
 
+#Solvers for the standard deviation of entropy-regularized barycenters of one-dimensional Gaussians with given standard deviations, weights and regularization (see Theorem 2 in https://arxiv.org/pdf/2006.02575 to generalize to arbitrary # of references).
 def oneD_barystdv_threerefsolver(weights, stdvs,regularization):
     eps_prime=max((regularization/2)**0.5,0)
     def func_to_solve(x):
@@ -117,7 +130,6 @@ def oneD_barystdv_threerefsolver(weights, stdvs,regularization):
     roots = least_squares(func_to_solve,x0=2)
     return roots.x
 
-
 def oneD_barystdv_solver_tworef(weights, stdvs,regularization):
     eps_prime=max((regularization/2)**0.5,0)
     def func_to_solve(x):
@@ -127,13 +139,7 @@ def oneD_barystdv_solver_tworef(weights, stdvs,regularization):
     roots = least_squares(func_to_solve,x0=2)
     return roots.x
 
-def randcov(low,high,dim,alpha):
-    A = np.random.uniform(low,high,(dim, dim))
-    B = A @ A.T + alpha*np.eye(dim)
-    rotation_matrix, _ = np.linalg.qr(np.random.randn(dim, dim))
-    composed_matrix = rotation_matrix @ B @ rotation_matrix.T
-    return composed_matrix
-
+#Computes the entropic potential between two ''measure'' objects, with a given regularization epsilon.
 def get_potential(source,target,epsilon):
     source_points=source.points
     target_points=target.points
@@ -145,6 +151,8 @@ def get_potential(source,target,epsilon):
     v=J[1].get('v')
     return u,v
 
+#Computes the (extended) entropic map (see Theorem 2.2 in the main paper) between two ''measure'' objects, given a fixed entropic potential (computed by ''get_potential'').
+#If get_potential is used with same ''source'' and ''target'' measure, then we obtain the (non-extended) entropic map between source and target.
 def highdim_extended_map(potential,source,target,epsilon,dim):
     source_points=source.points
     target_points=target.points
@@ -159,18 +167,22 @@ def highdim_extended_map(potential,source,target,epsilon,dim):
     J=np.divide(unnormalized_map,normalization)
     return J
 
+#Computes the entropy-regularized barycenter functional for the uniform measures on a set of "source_points", where the reference measures are uniform measures on the "reference_points".
 def barycenter_functional(source_points,reference_points,weights,epsilon):
     cost_vec=[]
     masses=np.dot(1/len(source_points),np.ones(len(source_points)))
     for i in reference_points:
-        M=np.power(euclidean_distances(source_points,i_points),2)
+        M=np.power(euclidean_distances(source_points,i),2)
         cost=ot.sinkhorn2(masses,masses,M,epsilon)
         cost_vec.append(cost)
     score=np.dot(np.array(weights),np.array(cost_vec))
     return score
 
+#Solves the analysis problem for the entropy-regularized barycenter functional for uniform measures on the supports of reference measures (''reference_measure_points'') and on the support of the base measure (''base_measure_points'').
+#Can be adapted to non-uniform measures by changing ``uniform_masses'' to a different set of masses.
+#See Algorithm 1 in main paper for pseudocode. \mu is supported on base_measure_points, \mathcal{V} are supported on the reference_measure_points.
 
-def analysis(reference_measure_points,base_measure_points,regularization):
+ def ent_analysis(reference_measure_points,base_measure_points,regularization):
     uniform_masses=np.dot(np.ones(len(base_measure_points)),1/len(base_measure_points))
     base_measure=measure(base_measure_points,uniform_masses)
     reference_measures=[]
@@ -178,16 +190,15 @@ def analysis(reference_measure_points,base_measure_points,regularization):
         reference_mass=np.dot(np.ones(len(i)),1/len(i))
         reference_meas=measure(i,reference_mass)
         reference_measures.append(reference_meas)
-
     entmap_list=[]
+    #compute entropic maps from base measure to reference measures
     def process_reference_map(reference_measure):
         g = get_potential(base_measure, reference_measure, regularization)
         extended = highdim_extended_map(g[1], base_measure, reference_measure, regularization, 3)
         return extended
-
     entmap_list = Parallel(n_jobs=-1)(delayed(process_reference_map)(i) for i in reference_measures)
-
     l2norms=[]
+    #Construct matrix A^\eps_\mu
     for p in np.arange(len(entmap_list)):
         for q in np.arange(len(entmap_list)):
             T_p=entmap_list[p]-base_measure_points
@@ -199,6 +210,7 @@ def analysis(reference_measure_points,base_measure_points,regularization):
             l2diff=np.dot(dotvec,uniform_masses)
             l2norms.append(l2diff)
     l2matrix=np.reshape(l2norms,(len(entmap_list),len(entmap_list)))
+    #Solve quadratic program
     x=cp.Variable(len(entmap_list))
     objective=cp.Minimize(cp.quad_form(x,l2matrix))
     constraints=[x>=0,cp.sum(x)==1]
@@ -208,6 +220,9 @@ def analysis(reference_measure_points,base_measure_points,regularization):
     return optimal_x
 
 
+#Solves the analysis problem for the Sinkhorn barycenter functional for uniform measures on the supports of reference measures (''reference_measure_points'') and on the support of the base measure (''base_measure_points'').
+#Can be adapted to non-uniform measures by changing ``uniform_masses'' to a different set of masses.
+#See Algorithm 1 in main paper for pseudocode. \mu is supported on base_measure_points, \mathcal{V} are supported on the reference_measure_points.
 
 def sink_analysis(reference_measure_points,base_measure_points,regularization):
     uniform_masses=np.dot(np.ones(len(base_measure_points)),1/len(base_measure_points))
@@ -218,15 +233,17 @@ def sink_analysis(reference_measure_points,base_measure_points,regularization):
         reference_meas=measure(i,reference_mass)
         reference_measures.append(reference_meas)
     entmap_list=[]
+    #compute entropic maps from base measure to reference measures
     def process_reference_map(reference_measure):
         g = get_potential(base_measure, reference_measure, regularization)
         extended = highdim_extended_map(g[1], base_measure, reference_measure, regularization, 3)
         return extended
-
     entmap_list = Parallel(n_jobs=-1)(delayed(process_reference_map)(i) for i in reference_measures)
+    #compute self entropic map
     g_self=get_potential(base_measure,base_measure,regularization)
     self_map=highdim_extended_map(g_self[1],base_measure,base_measure,regularization,3)
     l2norms=[]
+    #Construct matrix S^\eps_\mu
     for p in np.arange(len(entmap_list)):
         for q in np.arange(len(entmap_list)):
             T_p=entmap_list[p]-self_map
@@ -238,6 +255,7 @@ def sink_analysis(reference_measure_points,base_measure_points,regularization):
             l2diff=np.dot(dotvec,uniform_masses)
             l2norms.append(l2diff)
     l2matrix=np.reshape(l2norms,(len(entmap_list),len(entmap_list)))
+    #Solve quadratic program
     x=cp.Variable(len(entmap_list))
     objective=cp.Minimize(cp.quad_form(x,l2matrix))
     constraints=[x>=0,cp.sum(x)==1]
@@ -245,6 +263,7 @@ def sink_analysis(reference_measure_points,base_measure_points,regularization):
     problem.solve()
     optimal_x=x.value
     return optimal_x
+
 
 def entropic_synthesis(regularization,reference_measures,base_measure,weight_vec,stepsize,iterations):
     ref_1=reference_measures[0]
@@ -287,6 +306,8 @@ def sinkhorn_synthesis(regularization,reference_measures,base_measure,weight_vec
         update_source_points=source_measure.points-np.dot(stepsize,self_map)+np.dot(stepsize,combined_entmap)
         source_measure=measure(update_source_points,initial_masses)
     return source_measure
+
+
 ####Classification tools
 
 def find_indices(numbers, target):
@@ -336,7 +357,7 @@ def build_coefficients(list_of_entries,dictionary,regularization):
     for atom in dictionary:
         dictionary_points_list.append(atom.data)
     for entr in list_of_entries:
-        coeff=analysis(dictionary_points_list,entr.data,regularization)
+        coeff=ent_analysis(dictionary_points_list,entr.data,regularization)
         new_entry=entry(entr.labels,entr.data,coeff)
         new_list.append(new_entry)
     return new_list
@@ -469,39 +490,31 @@ def plot_results(list_of_entries,label_obj_dict,regularization,sink,atom_attribu
     fig.show()
 
 #### Unregularized functional/tangential Wasserstein projection
-    
+
+#Code for comparing our classification to unregularized barycentric coding/tangential Wasserstein projection approach in https://arxiv.org/abs/2207.14727. See main paper Section 5 for discussion.
 #Implementation is adapted from https://github.com/menghsuanhsieh/tangential-wasserstein-projection/tree/main, the supplement to '`Tangential Wasserstein Projections'' by Gunsilius, Hsieh & Lee (2022)
 
 def baryc_proj(source, target, method):
-    
     n1 = source.shape[0]
     n2 = target.shape[0]   
     p = source.shape[1]
     a_ones, b_ones = np.ones((n1,)) / n1, np.ones((n2,)) / n2
-    
     M = ot.dist(source, target)
     M = M.astype('float64')
     M /= M.max()
-    
     if method == 'emd':
         OTplan = ot.emd(a_ones, b_ones, M, numItermax = 1e7)
         
     elif method == 'entropic':
         OTplan = ot.bregman.sinkhorn_stabilized(a_ones, b_ones, M, reg = 5*1e-3)
-    
     # initialization
     OTmap = np.empty((0, p))
-
     for i in range(n1):
-        
         # normalization
         OTplan[i,:] = OTplan[i,:] / sum(OTplan[i,:])
-    
         # conditional expectation
         OTmap = np.vstack([OTmap, (target.T @ OTplan[i,:])])
-    
     OTmap = np.array(OTmap).astype('float32')
-    
     return(OTmap)
 
 def tan_wass_proj(target, controls, method = 'emd'):
@@ -511,7 +524,6 @@ def tan_wass_proj(target, controls, method = 'emd'):
     J = len(controls)
     S = np.mean(target)*n*d*J # Stabilizer: to ground the optimization objective
     uniform_masses=np.dot(1/len(target),np.ones(len(target)))
-    
     # Barycentric Projection
     G_list = []
     proj_list = []
@@ -519,7 +531,6 @@ def tan_wass_proj(target, controls, method = 'emd'):
         temp = baryc_proj(target, controls[i], method)
         G_list.append(temp)
         proj_list.append(temp - target)
-    
     #return mylambda_opt
     l2norms=[]
     for p in np.arange(len(proj_list)):

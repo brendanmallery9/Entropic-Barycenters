@@ -202,4 +202,3 @@ def train(model,batchlist, val_loader=None,  epochs=4):
                     correct += (predicted == labels).sum().item()
             val_acc = 100. * correct / total
             print('Valid accuracy: %d %%' % val_acc)
-

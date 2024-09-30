@@ -52,13 +52,6 @@ pointnet = PointNet()
 pointnet.to(device);
 optimizer = torch.optim.Adam(pointnet.parameters(), lr=0.0002)
 
-
-#Class for labeled pointcloud data. ''data'' is array of 3D arrays, ''labels'' is an integer.
-class labeled_data():
-    def __init__(self,data,labels):
-        self.data=data
-        self.labels=labels
-
 #Class for dictionary entries. ''data'' is array of 3D arrays, labels is an integer, ''coefficients'' is a probability vector with length= # reference pointclouds.
 class entry:
     def __init__(self,labels,data,coefficients):
@@ -325,7 +318,7 @@ def reset_weights(model):
 
 
 ######
-#Classification experiment using Sinkhorn, entropy-regularized and unregularized functionals
+#Classification using Sinkhorn, entropy-regularized and unregularized functionals
 #For ''benchmark_trial'', data=''batchlist'', corrupted_batches=''corrupted_batchlist'', m= # reference pointclouds
 #functional can either be "Entropy", "Sinkhorn" or "Unregularized".
 
@@ -560,6 +553,9 @@ def doubly_reg_noise_dictionary_learn(list_of_entries,dictionary,inner_regulariz
     processed_coefficients=combine_coefficients_list(coefficients,m)
     return processed_coefficients
 
+#Classification using doubly-regularized functional
+#For data=''batchlist'', corrupted_batches=''corrupted_batchlist'', m= # reference pointclouds
+#In our experiments, outer_regularization=0.01, inner_regularization=0.009
 
 def doubly_reg_benchmark_trial(data,corrupted_batches,m,inner_regularization,outer_regularization,inner_trials):
     time_vec=[]
@@ -716,6 +712,8 @@ unreg_vec,nn_vec=benchmark_experiment(10,5,'Unregularized')
 dreg_vec,nn_vec=doubly_benchmark_experiment(10,5,0.009,0.01)
 #np.save('dreg_learn_vec',dreg_vec)
 
+
+#Constructs mean and confidence intervals given an error tolerance
 def means_and_confidence_intervals(vector_array,confidence_level):
     inner_means=[]
     for i in vector_array:
@@ -733,7 +731,6 @@ def means_and_confidence_intervals(vector_array,confidence_level):
         confidence_interval = stats.t.interval(confidence_level, degrees_of_freedom, sample_mean, sample_sem)
         errors.append((confidence_interval[1]-confidence_interval[0])/2)
     return outer_means,errors
-
 
 alpha=0.95
 
