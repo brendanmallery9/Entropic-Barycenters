@@ -182,7 +182,7 @@ def barycenter_functional(source_points,reference_points,weights,epsilon):
 #Can be adapted to non-uniform measures by changing ``uniform_masses'' to a different set of masses.
 #See Algorithm 1 in main paper for pseudocode. \mu is supported on base_measure_points, \mathcal{V} are supported on the reference_measure_points.
 
- def ent_analysis(reference_measure_points,base_measure_points,regularization):
+def ent_analysis(reference_measure_points,base_measure_points,regularization):
     uniform_masses=np.dot(np.ones(len(base_measure_points)),1/len(base_measure_points))
     base_measure=measure(base_measure_points,uniform_masses)
     reference_measures=[]
@@ -264,6 +264,10 @@ def sink_analysis(reference_measure_points,base_measure_points,regularization):
     optimal_x=x.value
     return optimal_x
 
+#Solves the synthesis problem (via Algorithm 2 in the main paper) for the Entropic barycenter functional for given ''reference_measures'', ''weight_vec''. 
+#Iterations are initialized at ''base_measure.''
+#Stepsize should be in (0,1), regularization > 0
+
 
 def entropic_synthesis(regularization,reference_measures,base_measure,weight_vec,stepsize,iterations):
     ref_1=reference_measures[0]
@@ -277,13 +281,17 @@ def entropic_synthesis(regularization,reference_measures,base_measure,weight_vec
             print(i)
         combined_entmap=np.zeros((len(source_measure.points),dim))
         for j in np.arange(len(reference_measures)):
-            g = get_potential(base_measure, j, regularization)
-            entmap = highdim_extended_map(g[1], base_measure, j, regularization, 3)
+            g = get_potential(base_measure, reference_measures[j], regularization)
+            entmap = highdim_extended_map(g[1], base_measure, reference_measures[j], regularization, 3)
             scaled_entmap=np.dot(weight_vec[j],entmap)
             combined_entmap=combined_entmap+scaled_entmap
         update_source_points=np.dot((1-stepsize),source_measure.points)+np.dot(stepsize,combined_entmap)
         source_measure=measure(update_source_points,initial_masses)
     return source_measure
+
+#Solves the synthesis problem (via Algorithm 2 in the main paper) for the Sinkhorn barycenter functional for given ''reference_measures'', ''weight_vec''. 
+#Iterations are initialized at ''base_measure.''
+#Stepsize should be in (0,1), regularization > 0
 
 def sinkhorn_synthesis(regularization,reference_measures,base_measure,weight_vec,stepsize,iterations):
     ref_1=reference_measures[0]
@@ -297,8 +305,8 @@ def sinkhorn_synthesis(regularization,reference_measures,base_measure,weight_vec
             print(i)
         combined_entmap=np.zeros((len(source_measure.points),dim))
         for j in np.arange(len(reference_measures)):
-            g = get_potential(base_measure, j, regularization)
-            entmap = highdim_extended_map(g[1], base_measure, j, regularization, dim)
+            g = get_potential(base_measure, reference_measures[j], regularization)
+            entmap = highdim_extended_map(g[1], base_measure, reference_measures[j], regularization, dim)
             scaled_entmap=np.dot(weight_vec[j],entmap)
             combined_entmap=combined_entmap+scaled_entmap
         self_potential = get_potential(base_measure, base_measure, regularization)
@@ -310,27 +318,36 @@ def sinkhorn_synthesis(regularization,reference_measures,base_measure,weight_vec
 
 ####Classification tools
 
+
 def find_indices(numbers, target):
     return [index for index, value in enumerate(numbers) if value == target]
-
 
 def split_indices(indices,labels,cutoff):
     #e.g. cutoff=10
     label_list=find_indices(indices,labels)
     return label_list[0:cutoff],label_list[cutoff:]
 
+#atom data is a pointcloud (3D array of points)
+#atom index is the index of the pointcloud in the original list
+#atom label corresponds to the type of pointcloud (see ''label_obj_dictionary'' in 'classification_example.py')
+#atoms are obtained from reference measures
 class atom:
     def __init__(self,index,label,data):
         self.index=index
         self.label=label
         self.data=data
-        
+
+#entry data is a pointcloud (3D array of points)
+#entry label corresponds to the type of pointcloud (see ''label_obj_dictionary'' in 'classification_example.py')  
+#entry coefficients is a probability vector (of length # reference measures), which will be used for classification
 class entry:
     def __init__(self,labels,data,coefficients):
         self.labels=labels
         self.data=data
         self.coefficients=coefficients
 
+#''data'' is a list of point clouds (3D arrays) corresponding to a fixed label (e.g. the label associated to planes, see see ''label_obj_dictionary'' in 'classification_example.py')
+#Converts pointclouds in ''data'' indexed by ''list_of_indices'' to atom objects.
 def generate_atoms(list_of_indices,label,data,m):
     list_of_atoms=[]
     sampled_indices=list_of_indices[0:m]
@@ -339,6 +356,11 @@ def generate_atoms(list_of_indices,label,data,m):
         list_of_atoms.append(atm)
     return list_of_atoms
 
+#Preprocessing step for ''build_coefficients''
+
+#''data'' is a list of point clouds (3D arrays) corresponding to a fixed label (e.g. the label associated to planes, see see ''label_obj_dictionary'' in 'classification_example.py')
+#Converts pointclouds in ''data'' indexed by ''list_of_indices'' to entry objects.
+#Coefficients are default set to zero
 def generate_entries(list_of_indices,label,data,max_entries):
     list_of_entries=[]
     counter=0
@@ -351,6 +373,9 @@ def generate_entries(list_of_indices,label,data,max_entries):
             break
     return list_of_entries
 
+# ''dictionary'' is a list of atoms
+# ''list_of_entries'' is a list of entries to be classified
+# Computes coefficients to each entry in a list of entries using the entropy-regularized barycenter functional (see Section 5 in main paper for details)
 def build_coefficients(list_of_entries,dictionary,regularization):
     new_list=[]
     dictionary_points_list=[]
@@ -362,6 +387,9 @@ def build_coefficients(list_of_entries,dictionary,regularization):
         new_list.append(new_entry)
     return new_list
 
+# ''dictionary'' is a list of atoms
+# ''list_of_entries'' is a list of entries to be classified
+# Computes coefficients to each entry in a list of entries using the Sinkhorn barycenter functional (see Section 5 in main paper for details)
 def sink_build_coefficients(list_of_entries,dictionary,regularization):
     new_list=[]
     dictionary_points_list=[]
@@ -373,7 +401,7 @@ def sink_build_coefficients(list_of_entries,dictionary,regularization):
         new_list.append(new_entry)
     return new_list
 
-
+#If # of atoms is k x m, where k is the number of unique atom labels, combine_coefficients converts entry coefficients to probability vector of size k
 def combine_coefficients(dict_entry,m):
     coeffs=dict_entry.coefficients
     bins=int(len(coeffs)/m)
@@ -393,52 +421,27 @@ def combine_coefficients_list(list_of_dict_entr,m):
         processed_entries.append(new_entry)
     return processed_entries
 
-def get_atoms_and_entries(label_list,atom_attributes,entry_attributes,cutoff,m,max_entries):
-    with h5py.File('path/to/{}/data'.format(atom_attributes), 'r') as f:
-        atom_data_file = f['data'] 
-        atom_label_file=f['label']
-        atom_dataset = atom_data_file[:] 
-        all_labels=atom_label_file[:]
-        atom_attributes = atom_data_file.attrs
-    with h5py.File('path/to/{}/data'.format(entry_attributes), 'r') as f:
-        entry_data_file = f['data'] 
-        entry_label_file=f['label']
-        entry_dataset = entry_data_file[:] 
-        attributes = entry_data_file.attrs
-    #ref is atoms
-    #test is entries
-    ref_label_to_index_dictionary={}
-    test_label_to_index_dictionary={}
-    for i in label_list:
-        #spits out indices with label i and splits them into test and ref
-        ref_i,test_i=split_indices(all_labels,i,cutoff)
-        ref_label_to_index_dictionary.update({i:ref_i})
-        test_label_to_index_dictionary.update({i:test_i})
-    list_of_atoms=[]
-    list_of_entries=[]
-    for i in label_list:
-        #build atoms
-        i_atom_indices=ref_label_to_index_dictionary[i]
-        i_atoms=generate_atoms(i_atom_indices,i,atom_dataset,m)
-        list_of_atoms.append(i_atoms)
-        #build entries
-        i_entry_indices=test_label_to_index_dictionary[i]
-        i_entries=generate_entries(i_entry_indices,i,entry_dataset,max_entries)
-        list_of_entries.append(i_entries)
-    list_of_atoms = [item for sublist in list_of_atoms for item in sublist]
-    list_of_entries = [item for sublist in list_of_entries for item in sublist]
-    return list_of_atoms,list_of_entries
+#Performs classification using entropy-regularized barycenter fucntional
+# Inputs:
+# ''list_of_entries'': list of pointclouds stored as ''entry'' objects
+# ''dictionary'': list of pointclouds stored as ''atom'' objects
 
 def dictionary_learn(list_of_entries,dictionary,regularization,m):
     coefficients=build_coefficients(list_of_entries,dictionary,regularization)
-    processed_coefficients=combine_coefficients_list(coefficients,m)
-    return processed_coefficients
+    processed_entries=combine_coefficients_list(coefficients,m)
+    return processed_entries
+
+#Performs classification using Sinkhorn barycenter fucntional
+# Inputs:
+# ''list_of_entries'': list of pointclouds stored as ''entry'' objects
+# ''dictionary'': list of pointclouds stored as ''atom'' objects
 
 def sink_dictionary_learn(list_of_entries,dictionary,regularization,m):
     coefficients=sink_build_coefficients(list_of_entries,dictionary,regularization)
-    processed_coefficients=combine_coefficients_list(coefficients,m)
-    return processed_coefficients
+    processed_entries=combine_coefficients_list(coefficients,m)
+    return processed_entries
 
+#computes accuracy for outputs
 def score_results(list_of_entr,atoms):
     maxes=[]
     coeff_list=[]
@@ -567,8 +570,8 @@ def tangent_build_coefficients(list_of_entries,dictionary):
 
 def tangent_dictionary_learn(list_of_entries,dictionary,m):
     coefficients=tangent_build_coefficients(list_of_entries,dictionary)
-    processed_coefficients=combine_coefficients_list(coefficients,m)
-    return processed_coefficients
+    processed_entries=combine_coefficients_list(coefficients,m)
+    return processed_entries
 
 
 

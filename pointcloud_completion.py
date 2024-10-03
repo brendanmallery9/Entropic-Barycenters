@@ -41,6 +41,10 @@ random.seed = 1
 
 #Data processing
 
+#Each block converts a list of pointclouds, indexed by ''label_list'', to ''labeled_data'' objects. 
+#The pointcloud corruptions are (in order): dropout_local_1, dropout_local_2, dropout_global_4, dropout_jitter_4, and add_global_4
+#The processed ''clean'' pointclodus are stored in ''batch_list''. The corrupted pointclouds are stored in ''corrupted_batch_list''.
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 label_obj_dict={0:'plane',2:'bed', 17:'guitar', 22:'television',37:'vases'}
 label_list=[0,2,17,22,37]
@@ -139,50 +143,22 @@ for i in reduced_data_indices:
 reduced_labeled_data=np.array(reduced_labeled_data)
 dropout_global_4_batches=np.transpose(reduced_labeled_data)
 
-def ent_synthesis(references,weights,initial,epsilon,iterations,stepsize,dim):
-    source=initial
-    for i in np.arange(iterations):
-        gradient_list=[]
-        for target in references:
-            a,j_potential=get_potential(source,target,epsilon)
-            j_map=highdim_extended_map(j_potential,source,target,epsilon,dim)
-            gradient_list.append(j_map)
-        weighted_grads=[]
-        for j in np.arange(len(weights)):
-            weighted_grads.append(np.dot(weights[j],gradient_list[j]))
-        map=np.sum(weighted_grads,axis=0)
-        source_points=np.dot((1-stepsize),source.points)+np.dot(stepsize,map)
-        source=measure(source_points,initial.masses)
-        print(i)
-    return source
 
-    
-def sink_synthesis(references,weights,initial,epsilon,iterations,stepsize,dim):
-    source=initial
-    for i in np.arange(iterations):
-        gradient_list=[]
-        for target in references:
-            a,j_potential=get_potential(source,target,epsilon)
-            j_map=highdim_extended_map(j_potential,source,target,epsilon,dim)
-            gradient_list.append(j_map)
-        weighted_grads=[]
-        for j in np.arange(len(weights)):
-            weighted_grads.append(np.dot(weights[j],gradient_list[j]))
-        map=np.sum(weighted_grads,axis=0)
-        a,self_potential=get_potential(source,source,epsilon)
-        self_map=highdim_extended_map(self_potential,source,source,epsilon,dim)
-        source_points=source.points-np.dot(stepsize,self_map)+np.dot(stepsize,map)
-        source=measure(source_points,initial.masses)
-        print(i)
-    return source
+#Point cloud completion tool
+#Inputs:
+#source: corrupted data, stored as ''measure'' object 
+#references: list of ''measure'' objects
+#method: 'Entropy' or 'Sinkhorn'
+#dim: dimension (3)
+#support_size: support size of completed pointcloud (integer)
 
 def completion(source,references,regularization,method,dim,support_size):
     if method=='Entropy':
-        analysis_method=analysis
-        synthesis_method=ent_synthesis
+        analysis_method=ent_analysis
+        synthesis_method=entropic_synthesis
     elif method=='Sinkhorn':
         analysis_method=sink_analysis
-        synthesis_method=sink_synthesis
+        synthesis_method=sinkhorn_synthesis
     source_points=source.points
     reference_points=[]
     for i in references:
@@ -193,7 +169,7 @@ def completion(source,references,regularization,method,dim,support_size):
     uniform_points = np.random.rand(support_size, dim)
     uniform_masses=np.dot(np.ones(support_size),1/support_size)
     base_measure=measure(uniform_points,uniform_masses)
-    completed_pointcloud=synthesis_method(references,coefficients,base_measure,regularization,iterations,stepsize,dim)
+    completed_pointcloud=synthesis_method(regularization,references,base_measure,coefficients,stepsize,iterations)
     return completed_pointcloud
 
 planes=np.transpose(batch_list)[0]
@@ -214,8 +190,6 @@ for i in np.arange(len(planes)):
     dropout_global_4_plane_measures.append(measure(dropout_global_4_planes[i].data,dglobal_masses))
 
 references=plane_measures[0:5]
-
-#mass=np.dot(np.ones(len(planes[12].data)),1/len(planes[12].data))
 
 def compute_and_plot_completion(uncorrupted_data_array,corrupted_data_array,index,method,reference_measures,regularization,dim,support_size):
     recon=completion(corrupted_data_array[index],reference_measures,regularization,'{}'.format(method),dim,support_size)
@@ -242,6 +216,7 @@ def compute_and_plot_completion(uncorrupted_data_array,corrupted_data_array,inde
     stoptime=time.time()
     plt.savefig(f"completion_{method}_reg{regularization}_index{stoptime}.png")
     plt.close(fig)
+
 compute_and_plot_completion(plane_measures,dropout_global_4_plane_measures,12,'Entropy',references,0.003,3,1024)
 compute_and_plot_completion(plane_measures,dropout_global_4_plane_measures,12,'Sinkhorn',references,0.003,3,1024)
 compute_and_plot_completion(plane_measures,dropout_local_4_plane_measures,12,'Entropy',references,0.003,3,1024)
