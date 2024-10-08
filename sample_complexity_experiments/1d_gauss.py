@@ -24,7 +24,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from EOT_tools import *
 
 regularization=2
-sample_range=[10,20]
+sample_range=[10,20,40,80,160,320,640,1280,2560,5120,10240]
 instances=100
 
 def random_number_vec(size,low,high):

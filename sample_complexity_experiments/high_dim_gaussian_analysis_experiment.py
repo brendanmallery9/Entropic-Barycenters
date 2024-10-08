@@ -22,7 +22,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from EOT_tools import *
 
 regularization=1
-sample_range=[10,20]
+sample_range=[10,20,40,80,160,320,640,1280,2560,5120,10240]
 initial_samps=10
     
 def highdim_analysis_experiment_three_refs(regularization,trials,instances,dim,initial_samps):

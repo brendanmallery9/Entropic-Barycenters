@@ -143,7 +143,6 @@ for i in reduced_data_indices:
 reduced_labeled_data=np.array(reduced_labeled_data)
 dropout_global_4_batches=np.transpose(reduced_labeled_data)
 
-
 #Point cloud completion tool
 #Inputs:
 #source: corrupted data, stored as ''measure'' object 

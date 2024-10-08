@@ -23,7 +23,7 @@ from EOT_tools import *
 
 regularization=1
 initial_samps=100
-sample_range=[10,20]
+sample_range=[10,20,40,80,160,320,640,1280,2560,5120,10240]
 
 
 def uniform_sample_box(dimension, diameter, num_samples,center):

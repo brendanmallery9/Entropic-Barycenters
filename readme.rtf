@@ -1,5 +1,16 @@
-
 This file contains the code required to reproduce results in main submission.
+
+Requirements:
+
+numpy
+torch
+matplotlib 
+sklearn (sci-kit learn)
+pandas
+Python optimal transport (https://pythonot.github.io/index.html)
+h5py
+scipy ()
+tensorflow
 
 For numerical experiments for the analysis problem: 
 
@@ -13,11 +24,20 @@ classification_example.py
 For completion:
 pointcloud_completion.py
 
-
-(*) Make sure to set working directory to '/classification_experiment/' before running classification_example.py
+(*) Set working directory to '/classification_experiment/' before running classification_example.py
 
 Pointnet implementation is adapted from:
 
-https://github.com/nikitakaraevv/pointnet
+https://github.com/nikitakaraevv/pointnet (original paper: https://arxiv.org/abs/1612.00593)
 
 as detailed in main submission.
+
+
+Score estimation implementation is adapted from:
+
+https://github.com/miskcoo/kscore (original paper: https://arxiv.org/abs/2005.10099)
+
+as detailed in main submission.
+
+
+We have included a subset of the PointCloud-c dataset (classificaton_exmaple/pointcloud-c). Full dataset is available at https://pointcloud-c.github.io/home.html
