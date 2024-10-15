@@ -44,6 +44,7 @@ random.seed = 1
 #Each block converts a list of pointclouds, indexed by ''label_list'', to ''labeled_data'' objects. 
 #The pointcloud corruptions are (in order): dropout_local_1, dropout_local_2, dropout_global_4, dropout_jitter_4, and add_global_4
 #The processed ''clean'' pointclodus are stored in ''batch_list''. The corrupted pointclouds are stored in ''corrupted_batch_list''.
+#All credit for the data set goes to: https://pointcloud-c.github.io/home.html
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 label_obj_dict={0:'plane',2:'bed', 17:'guitar', 22:'television',37:'vases'}

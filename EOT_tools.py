@@ -281,8 +281,8 @@ def entropic_synthesis(regularization,reference_measures,base_measure,weight_vec
             print(i)
         combined_entmap=np.zeros((len(source_measure.points),dim))
         for j in np.arange(len(reference_measures)):
-            g = get_potential(base_measure, reference_measures[j], regularization)
-            entmap = highdim_extended_map(g[1], base_measure, reference_measures[j], regularization, 3)
+            g = get_potential(source_measure, reference_measures[j], regularization)
+            entmap = highdim_extended_map(g[1], source_measure, reference_measures[j], regularization, 3)
             scaled_entmap=np.dot(weight_vec[j],entmap)
             combined_entmap=combined_entmap+scaled_entmap
         update_source_points=np.dot((1-stepsize),source_measure.points)+np.dot(stepsize,combined_entmap)
@@ -305,12 +305,12 @@ def sinkhorn_synthesis(regularization,reference_measures,base_measure,weight_vec
             print(i)
         combined_entmap=np.zeros((len(source_measure.points),dim))
         for j in np.arange(len(reference_measures)):
-            g = get_potential(base_measure, reference_measures[j], regularization)
-            entmap = highdim_extended_map(g[1], base_measure, reference_measures[j], regularization, dim)
+            g = get_potential(source_measure, reference_measures[j], regularization)
+            entmap = highdim_extended_map(g[1], source_measure, reference_measures[j], regularization, dim)
             scaled_entmap=np.dot(weight_vec[j],entmap)
             combined_entmap=combined_entmap+scaled_entmap
-        self_potential = get_potential(base_measure, base_measure, regularization)
-        self_map = highdim_extended_map(self_potential[1], base_measure, base_measure, regularization, dim)
+        self_potential = get_potential(source_measure, source_measure, regularization)
+        self_map = highdim_extended_map(self_potential[1], source_measure, source_measure, regularization, dim)
         update_source_points=source_measure.points-np.dot(stepsize,self_map)+np.dot(stepsize,combined_entmap)
         source_measure=measure(update_source_points,initial_masses)
     return source_measure

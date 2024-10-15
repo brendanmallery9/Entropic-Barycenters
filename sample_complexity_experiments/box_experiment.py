@@ -16,6 +16,7 @@ import cvxpy as cp
 from scipy.optimize import curve_fit
 from sympy import symbols, Eq, solve
 import random
+import sys
 from os.path  import join
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
