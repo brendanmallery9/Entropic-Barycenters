@@ -322,18 +322,9 @@ def reset_weights(model):
 #For ''benchmark_trial'', data=''batchlist'', corrupted_batches=''corrupted_batchlist'', m= # reference pointclouds
 #functional can either be "Entropy", "Sinkhorn" or "Unregularized".
 
-def benchmark_trial(data,corrupted_batches,m,regularization,inner_trials,functional):
+def benchmark_trial(train_data,test_data,permutation,corrupted_batches,m,regularization,inner_trials,functional):
     time_vec=[]
-    data=np.transpose(data)
     #Split data into train and test sets (80 train, 20 test for each class of pointclouds). m reference point clouds are selected from the training data
-    train_data=[]
-    test_data=[]
-    for i in data:
-        i_train,i_test,permutation=split(i,80,20)
-        train_data.append(i_train)
-        test_data.append(i_test)
-    train_data=train_data
-    test_data=test_data
     train_data_points=[]
     for i in train_data:
         type_bin=[]
@@ -452,12 +443,23 @@ def benchmark_trial(data,corrupted_batches,m,regularization,inner_trials,functio
             nn_result_vec.append(nn_results)
     return big_wass_learning_vec,nn_result_vec,time_vec,train_data_points,test_data_points,train_data_labels,test_data_labels
 
-def benchmark_experiment(inner_trials,outer_trials,functional,reg):
+def test_train_split(data):
+    data=np.transpose(data)
+    #Split data into train and test sets (80 train, 20 test for each class of pointclouds). m reference point clouds are selected from the training data
+    train_data=[]
+    test_data=[]
+    for i in data:
+        i_train,i_test,permutation=split(i,80,20)
+        train_data.append(i_train)
+        test_data.append(i_test)
+    return train_data,test_data,permutation
+
+def benchmark_experiment(train_data,test_data,permutation,inner_trials,outer_trials,functional,reg):
     wass_learning_vec=[]
     nn_learning_vec=[]
     os.mkdir('{}_folder_{}'.format(functional,reg))
     for i in np.arange(outer_trials):
-        A,B,time_vec,train_points,test_points,train_labels,test_labels=benchmark_trial(batch_list,corrupted_batchlist,3,reg,inner_trials,functional)
+        A,B,time_vec,train_points,test_points,train_labels,test_labels=benchmark_trial(train_data,test_data,permutation,corrupted_batchlist,3,reg,inner_trials,functional)
         np.save('{}_folder_{}/wass_trial_{}'.format(functional,reg,i),A)
         np.save('{}_folder_{}/nn_trial_{}'.format(functional,reg,i),B)
         np.save('{}_folder_{}/time_vec_{}'.format(functional,reg,i),time_vec)
@@ -557,17 +559,8 @@ def doubly_reg_noise_dictionary_learn(list_of_entries,dictionary,inner_regulariz
 #For data=''batchlist'', corrupted_batches=''corrupted_batchlist'', m= # reference pointclouds
 #In our experiments, outer_regularization=0.01, inner_regularization=0.009
 
-def doubly_reg_benchmark_trial(data,corrupted_batches,m,inner_regularization,outer_regularization,inner_trials):
+def doubly_reg_benchmark_trial(train_data,test_data,permutation,corrupted_batches,m,inner_regularization,outer_regularization,inner_trials):
     time_vec=[]
-    data=np.transpose(data)
-    train_data=[]
-    test_data=[]
-    for i in data:
-        i_train,i_test,permutation=split(i,80,20)
-        train_data.append(i_train)
-        test_data.append(i_test)
-    train_data=train_data
-    test_data=test_data
     train_data_points=[]
     for i in train_data:
         type_bin=[]
@@ -667,50 +660,84 @@ def doubly_reg_benchmark_trial(data,corrupted_batches,m,inner_regularization,out
             nn_result_vec.append(nn_results)
     return big_wass_learning_vec,nn_result_vec,time_vec,train_data_points,test_data_points,train_data_labels,test_data_labels,coefficient_vec
 
-def doubly_benchmark_experiment(inner_trials,outer_trials,inner_reg,outer_reg):
-    wass_learning_vec=[]
-    nn_learning_vec=[]
-    os.mkdir('dreg_folder')
-    for i in np.arange(outer_trials):
-        A,B,time_vec,train_points,test_points,train_labels,test_labels,coefficient_vec=doubly_reg_benchmark_trial(batch_list,corrupted_batchlist,3,inner_reg,outer_reg,inner_trials)
-        wass_learning_vec.append(A)
-        nn_learning_vec.append(B)
-        np.save('dreg_folder/wass_trial_{}'.format(i),A)
-        np.save('dreg_folder/nn_trial_{}'.format(i),B)
-        np.save('dreg_folder/time_vec_{}'.format(i),time_vec)
-        print(i)
-    return wass_learning_vec,nn_learning_vec
-
 
 
 #Script
 
-loweps_sinkhorn_vec,nn_vec=benchmark_experiment(10,5,'Sinkhorn',0.009)
-#np.save('sinkhorn_learn_vec',sinkhorn_vec)
-#np.save('nn_learn_vec',nn_vec)
+os.mkdir('{}_folder_{}'.format('Sinkhorn',0.009))
+os.mkdir('{}_folder_{}'.format('Entropy',0.009))
+os.mkdir('{}_folder_{}'.format('Sinkhorn',0.089))
+os.mkdir('{}_folder_{}'.format('Entropy',0.089))
+os.mkdir('{}_folder_{}'.format('Sinkhorn',0.75))
+os.mkdir('{}_folder_{}'.format('Entropy',0.75))
+os.mkdir('{}_folder_{}'.format('Unregularized',0))
+os.mkdir('dreg_folder')
+os.mkdir('nn_folder')
 
-loweps_entropy_vec,nn_vec=benchmark_experiment(10,5,'Entropy',0.009)
-#np.save('entropy_learn_vec',entropy_vec)
+outer_trials=10
+loweps_sinkhorn_vec=[]
+loweps_entropy_vec=[]
+mideps_sinkhorn_vec=[]
+mideps_entropy_vec=[]
+higheps_sinkhorn_vec=[]
+higheps_entropy_vec=[]
+unreg_vec=[]
+dreg_vec=[]
+nn_vec=[]
 
-mideps_sinkhorn_vec,nn_vec=benchmark_experiment(10,5,'Sinkhorn',0.089)
-#np.save('sinkhorn_learn_vec',sinkhorn_vec)
-#np.save('nn_learn_vec',nn_vec)
+for i in np.arange(outer_trials):
+    train_split,test_split,perm=test_train_split(batch_list)
 
-mideps_entropy_vec,nn_vec=benchmark_experiment(10,5,'Entropy',0.089)
-#np.save('entropy_learn_vec',entropy_vec)
+    #Unreg
+    A,B,time_vec,train_points,test_points,train_labels,test_labels=benchmark_trial(train_split,test_split,perm,corrupted_batchlist,3,0,1,'Unregularized')
+    np.save('{}_folder_{}/wass_trial_{}'.format('Unregularized',0,i),A)
+    np.save('{}_folder_{}/time_vec_{}'.format('Unregularized',0,i),time_vec)
+    np.save('nn_folder/nn_trial_{}'.format(i),B)
+    unreg_vec.append(A)
+    nn_vec.append(B)
 
-higheps_sinkhorn_vec,nn_vec=benchmark_experiment(10,5,'Sinkhorn',0.75)
-#np.save('sinkhorn_learn_vec',sinkhorn_vec)
-#np.save('nn_learn_vec',nn_vec)
+    #Doubly
+    A,B,time_vec,train_points,test_points,train_labels,test_labels,coefficient_vec=doubly_reg_benchmark_trial(train_split,test_split,perm,corrupted_batchlist,3,0.009,0.01,1)
+    np.save('dreg_folder/wass_trial_{}'.format(i),A)
+    np.save('dreg_folder/time_vec_{}'.format(i),time_vec)
+    dreg_vec.append(A)
 
-higheps_entropy_vec,nn_vec=benchmark_experiment(10,5,'Entropy',0.75)
-#np.save('entropy_learn_vec',entropy_vec)
+    #Sinkhorn 0.009
+    A,B,time_vec,train_points,test_points,train_labels,test_labels=benchmark_trial(train_split,test_split,perm,corrupted_batchlist,3,0.009,1,'Sinkhorn')
+    np.save('{}_folder_{}/wass_trial_{}'.format('Sinkhorn',0.009,i),A)
+    np.save('{}_folder_{}/time_vec_{}'.format('Sinkhorn',0.009,i),time_vec)
+    loweps_sinkhorn_vec.append(A)
 
-unreg_vec,nn_vec=benchmark_experiment(10,5,'Unregularized')
-#np.save('unreg_learn_vec',unreg_vec)
+    #Entropy 0.009
+    A,B,time_vec,train_points,test_points,train_labels,test_labels=benchmark_trial(train_split,test_split,perm,corrupted_batchlist,3,0.009,1,'Entropy')
+    np.save('{}_folder_{}/wass_trial_{}'.format('Entropy',0.009,i),A)
+    np.save('{}_folder_{}/time_vec_{}'.format('Entropy',0.009,i),time_vec)
+    loweps_entropy_vec.append(A)
+    #Sinkhorn 0.089
+    A,B,time_vec,train_points,test_points,train_labels,test_labels=benchmark_trial(train_split,test_split,perm,corrupted_batchlist,3,0.089,1,'Sinkhorn')
+    np.save('{}_folder_{}/wass_trial_{}'.format('Sinkhorn',0.089,i),A)
+    np.save('{}_folder_{}/time_vec_{}'.format('Sinkhorn',0.089,i),time_vec)
+    mideps_sinkhorn_vec.append(A)
 
-dreg_vec,nn_vec=doubly_benchmark_experiment(10,5,0.009,0.01)
-#np.save('dreg_learn_vec',dreg_vec)
+    #Entropy 0.089
+    A,B,time_vec,train_points,test_points,train_labels,test_labels=benchmark_trial(train_split,test_split,perm,corrupted_batchlist,3,0.089,1,'Entropy')
+    np.save('{}_folder_{}/wass_trial_{}'.format('Entropy',0.089,i),A)
+    np.save('{}_folder_{}/time_vec_{}'.format('Entropy',0.089,i),time_vec)
+    mideps_entropy_vec.append(A)
+
+    #Sinkhorn 0.75
+    A,B,time_vec,train_points,test_points,train_labels,test_labels=benchmark_trial(train_split,test_split,perm,corrupted_batchlist,3,0.75,1,'Sinkhorn')
+    np.save('{}_folder_{}/wass_trial_{}'.format('Sinkhorn',0.75,i),A)
+    np.save('{}_folder_{}/time_vec_{}'.format('Sinkhorn',0.75,i),time_vec)
+    higheps_sinkhorn_vec.append(A)
+
+    #Entropy 0.75
+    A,B,time_vec,train_points,test_points,train_labels,test_labels=benchmark_trial(train_split,test_split,perm,corrupted_batchlist,3,0.75,1,'Entropy')
+    np.save('{}_folder_{}/wass_trial_{}'.format('Entropy',0.75,i),A)
+    np.save('{}_folder_{}/time_vec_{}'.format('Entropy',0.75,i),time_vec)
+    higheps_entropy_vec.append(A)
+
+
 
 
 #Constructs mean and confidence intervals given an error tolerance
