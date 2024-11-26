@@ -674,7 +674,7 @@ os.mkdir('{}_folder_{}'.format('Unregularized',0))
 os.mkdir('dreg_folder')
 os.mkdir('nn_folder')
 
-outer_trials=10
+outer_trials=15
 loweps_sinkhorn_vec=[]
 loweps_entropy_vec=[]
 mideps_sinkhorn_vec=[]
@@ -687,7 +687,7 @@ nn_vec=[]
 
 for i in np.arange(outer_trials):
     train_split,test_split,perm=test_train_split(batch_list)
-
+    
     #Unreg
     A,B,time_vec,train_points,test_points,train_labels,test_labels=benchmark_trial(train_split,test_split,perm,corrupted_batchlist,3,0,1,'Unregularized')
     np.save('{}_folder_{}/wass_trial_{}'.format('Unregularized',0,i),A)
