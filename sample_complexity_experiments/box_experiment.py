@@ -159,12 +159,13 @@ for i in logtrials:
 plt.figure(figsize=(7, 5))
 plt.scatter(logtrials,log_loss, label='(Log_10) L2 loss')
 plt.plot(logtrials,line_of_fit,c='red')
-textbox_content = "Slope={}, Intercept={}".format(round(coefficients[0],4),round(coefficients[1],3))
-plt.text(.5,.76,textbox_content, bbox=dict(facecolor='red', alpha=0.5),transform=plt.gca().transAxes,fontsize=11)
-plt.xlabel(r'$\log_{10}$ Sample #',fontsize=14)
-plt.ylabel(r'$\log_{10} \|\lambda^*-\hat{\lambda}^n\|^2$')
-fig_size = plt.gcf().get_size_inches()
-plt.savefig('box_experiment.png')
+textbox_content = "Slope={}, \n Intercept={}".format(round(coefficients[0],4),round(coefficients[1],3))
+plt.text(.52,.8,textbox_content, bbox=dict(facecolor='red', alpha=0.5),transform=plt.gca().transAxes,fontsize=20)
+plt.xlabel(r'$\log_{10}$ Sample #',fontsize=18)
+plt.ylabel(r'$\log_{10} \|\lambda^*-\hat{\lambda}^n\|^2$',fontsize=18)
+#fig_size = plt.gcf().get_size_inches()
+plt.savefig("box_experiment.pdf", format= 'pdf', bbox_inches="tight")
+
 plt.show()
 
 

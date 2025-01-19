@@ -23,7 +23,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from EOT_tools import *
 
 regularization=1
-sample_range=[10,20,40,80,160,320,640,1280,2560,5120,10240]
+#sample_range=[10,20,40,80,160,320,640,1280,2560,5120,10240]
+sample_range=[10,20]
 initial_samps=10
     
 def highdim_analysis_experiment_three_refs(regularization,trials,instances,dim,initial_samps):
@@ -105,6 +106,7 @@ losses=highdim_analysis_experiment_three_refs(regularization,sample_range,10,5,i
 
 #Parameters used for experiments in paper:
 #sample_range=[10,20,40,80,160,320,640,1280,2560,5120,10240]
+#initial_samps=100
 #losses=highdim_analysis_experiment_three_refs(regularization,sample_range,100,5)
 
 #script to plot results
@@ -120,12 +122,12 @@ for i in logtrials:
 plt.figure(figsize=(7, 5))
 plt.scatter(logtrials,log_loss, label='(Log_10) L2 loss')
 plt.plot(logtrials,line_of_fit,c='red')
-textbox_content = "Slope={}, Intercept={}".format(round(coefficients[0],4),round(coefficients[1],3))
-plt.text(.5,.76,textbox_content, bbox=dict(facecolor='red', alpha=0.5),transform=plt.gca().transAxes,fontsize=11)
-plt.xlabel(r'$\log_{10}$ Sample #',fontsize=14)
-plt.ylabel(r'$\log_{10} \|\lambda^*-\hat{\lambda}^n\|^2$')
+textbox_content = "Slope={}, \n Intercept={}".format(round(coefficients[0],4),round(coefficients[1],3))
+plt.text(.52,.8,textbox_content, bbox=dict(facecolor='red', alpha=0.5),transform=plt.gca().transAxes,fontsize=20)
+plt.xlabel(r'$\log_{10}$ Sample #',fontsize=18)
+plt.ylabel(r'$\log_{10} \|\lambda^*-\hat{\lambda}^n\|^2$',fontsize=18)
 fig_size = plt.gcf().get_size_inches()
-plt.savefig('hdg_experiment.png')
+plt.savefig("hdg_experiment.pdf", format= 'pdf', bbox_inches="tight")
 plt.show()
 
 

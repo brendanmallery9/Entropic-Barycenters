@@ -24,8 +24,10 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from EOT_tools import *
 
 regularization=2
-sample_range=[10,20,40,80,160,320,640,1280,2560,5120,10240]
-instances=100
+#sample_range=[10,20,40,80,160,320,640,1280,2560,5120,10240]
+#instances=100
+sample_range=[10,20]
+instances=10
 
 def random_number_vec(size,low,high):
     vec=np.random.uniform(low,high,size)
@@ -170,11 +172,12 @@ for i in logtrials:
 plt.figure(figsize=(7, 5))
 plt.scatter(logtrials,log_loss, label='(Log_10) L2 loss')
 plt.plot(logtrials,line_of_fit,c='red')
-textbox_content = "Slope={}, Intercept={}".format(round(coefficients[0],4),round(coefficients[1],3))
-plt.text(.5,.76,textbox_content, bbox=dict(facecolor='red', alpha=0.5),transform=plt.gca().transAxes,fontsize=11)
-plt.xlabel(r'$\log_{10}$ Sample #',fontsize=14)
-fig_size = plt.gcf().get_size_inches()
-plt.savefig('1D_gauss_2ref_experiment.png')
+textbox_content = "Slope={}, \n Intercept={}".format(round(coefficients[0],4),round(coefficients[1],3))
+plt.text(.52,.8,textbox_content, bbox=dict(facecolor='red', alpha=0.5),transform=plt.gca().transAxes,fontsize=20)
+plt.xlabel(r'$\log_{10}$ Sample #',fontsize=18)
+plt.ylabel(r'$\log_{10} \|\lambda^*-\hat{\lambda}^n\|^2$',fontsize=18)
+#fig_size = plt.gcf().get_size_inches()
+plt.savefig("1D_gauss_2ref_experiment.pdf", format= 'pdf', bbox_inches="tight")
 plt.show()
 
 
