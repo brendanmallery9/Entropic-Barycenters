@@ -120,23 +120,15 @@ def random_vec(size,low,high):
     return rot_vec
 
 #Solvers for the standard deviation of entropy-regularized barycenters of one-dimensional Gaussians with given standard deviations, weights and regularization (see Theorem 2 in https://arxiv.org/pdf/2006.02575 to generalize to arbitrary # of references).
-def oneD_barystdv_threerefsolver(weights, stdvs,regularization):
-    eps_prime=max((regularization/2)**0.5,0)
-    def func_to_solve(x):
-        summand1 = weights[0] * (eps_prime**4 + 4 * stdvs[0]**2 * x**2)**0.5
-        summand2 = weights[1] * (eps_prime**4 + 4 * stdvs[1]**2 * x**2)**0.5
-        summand3 = weights[2] * (eps_prime**4 + 4 * stdvs[2]**2 * x**2)**0.5
-        return summand1 + summand2 + summand3 - (eps_prime**2 + 2 * x**2)
-    roots = least_squares(func_to_solve,x0=2)
-    return roots.x
 
-def oneD_barystdv_solver_tworef(weights, stdvs,regularization):
-    eps_prime=max((regularization/2)**0.5,0)
+def oneD_barystdv_solver(weights, stdvs, regularization):
+    eps_prime = max((regularization / 2) ** 0.5, 0)
+    
     def func_to_solve(x):
-        summand1 = weights[0] * (eps_prime**4 + 4 * stdvs[0]**2 * x**2)**0.5
-        summand2 = weights[1] * (eps_prime**4 + 4 * stdvs[1]**2 * x**2)**0.5
-        return summand1 + summand2 - (eps_prime**2 + 2 * x**2)
-    roots = least_squares(func_to_solve,x0=2)
+        summands = [w * (eps_prime**4 + 4 * s**2 * x**2) ** 0.5 for w, s in zip(weights, stdvs)]
+        return sum(summands) - (eps_prime**2 + 2 * x**2)
+    
+    roots = least_squares(func_to_solve, x0=2)
     return roots.x
 
 #Computes the entropic potential between two ''measure'' objects, with a given regularization epsilon.
@@ -270,9 +262,6 @@ def sink_analysis(reference_measure_points,base_measure_points,regularization):
 
 
 def entropic_synthesis(regularization,reference_measures,base_measure,weight_vec,stepsize,iterations):
-    ref_1=reference_measures[0]
-    ref_2=reference_measures[1]
-    ref_3=reference_measures[2]
     dim=len(base_measure.points[0])
     initial_masses=base_measure.masses
     source_measure=base_measure
@@ -294,9 +283,6 @@ def entropic_synthesis(regularization,reference_measures,base_measure,weight_vec
 #Stepsize should be in (0,1), regularization > 0
 
 def sinkhorn_synthesis(regularization,reference_measures,base_measure,weight_vec,stepsize,iterations):
-    ref_1=reference_measures[0]
-    ref_2=reference_measures[1]
-    ref_3=reference_measures[2]
     dim=len(base_measure.points[0])
     initial_masses=base_measure.masses
     source_measure=base_measure

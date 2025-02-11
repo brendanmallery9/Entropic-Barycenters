@@ -23,7 +23,6 @@ from sympy import symbols, Eq, solve
 from os.path import join
 from plotly.subplots import make_subplots
 from plotly.validators.scatter.marker import SymbolValidator
-from sklearn.manifold import TSNE
 from joblib import Parallel, delayed
 import torch.nn as nn
 import torch.nn.functional as F
@@ -36,6 +35,7 @@ from kscore.kernels import *
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from EOT_tools import *
 
+#Code to perform point cloud classification experiment
 
 random.seed = 1
 
@@ -48,6 +48,7 @@ label_obj_dict={0:'plane',2:'bed', 17:'guitar', 22:'television',37:'vases'}
 label_list=[0,2,17,22,37]
 ordered_labels={0:0,2:1,17:2,22:3,37:4}
 invert_ordered={0:0,1:2,2:17,3:22,4:37}
+
 pointnet = PointNet()
 pointnet.to(device);
 optimizer = torch.optim.Adam(pointnet.parameters(), lr=0.0002)
@@ -83,158 +84,6 @@ def map_labels(labels,dictionary):
     for i in labels:
         new_labels.append(dictionary[int(i[0])])
     return np.array(new_labels)
-
-#Data Preprocessing
-
-#Each block converts a list of pointclouds, indexed by ''label_list'', to ''labeled_data'' objects. 
-#The pointcloud corruptions are (in order): dropout_local_1, dropout_local_2, dropout_global_4, dropout_jitter_4, and add_global_4
-#The processed ''clean'' pointclodus are stored in ''batch_list''. The corrupted pointclouds are stored in ''corrupted_batch_list''.
-
-with h5py.File('pointcloud-c/clean.h5', 'r') as f:
-    clean_data_file = f['data'] 
-    clean_label_file=f['label']
-    clean_dataset = clean_data_file[:] 
-    all_labels=clean_label_file[:]
-reduced_data_indices=[]
-reduced_data_labels=[]
-for j in label_list:
-    A=find_indices(all_labels,j)
-    reduced_data_indices.append(A)
-    reduced_data_labels.append(np.dot(np.ones(len(A)),j))
-reduced_labeled_data=[]
-for i in reduced_data_indices:
-    A=[]
-    for j in i:
-        A.append(labeled_data(clean_dataset[j],all_labels[j]))
-    reduced_labeled_data.append(np.array(A))
-reduced_labeled_data=np.array(reduced_labeled_data)
-batch_list=np.transpose(reduced_labeled_data)
-
-with h5py.File('pointcloud-c/dropout_local_1.h5', 'r') as f:
-    corrupted_data_file = f['data'] 
-    corrupted_label_file=f['label']
-    corrupted_dataset = corrupted_data_file[:] 
-    all_labels=corrupted_label_file[:]
-reduced_data_indices=[]
-reduced_data_labels=[]
-for j in label_list:
-    A=find_indices(all_labels,j)
-    reduced_data_indices.append(A)
-    reduced_data_labels.append(np.dot(np.ones(len(A)),j))
-
-reduced_labeled_data=[]
-for i in reduced_data_indices:
-    A=[]
-    for j in i:
-        A.append(labeled_data(corrupted_dataset[j],all_labels[j]))
-    reduced_labeled_data.append(np.array(A))
-reduced_labeled_data=np.array(reduced_labeled_data)
-dropout_local_1_batches=np.transpose(reduced_labeled_data)
-
-with h5py.File('pointcloud-c/dropout_local_2.h5', 'r') as f:
-    corrupted_data_file = f['data'] 
-    corrupted_label_file=f['label']
-    corrupted_dataset = corrupted_data_file[:] 
-    all_labels=corrupted_label_file[:]
-reduced_data_indices=[]
-reduced_data_labels=[]
-for j in label_list:
-    A=find_indices(all_labels,j)
-    reduced_data_indices.append(A)
-    reduced_data_labels.append(np.dot(np.ones(len(A)),j))
-
-reduced_labeled_data=[]
-for i in reduced_data_indices:
-    A=[]
-    for j in i:
-        A.append(labeled_data(corrupted_dataset[j],all_labels[j]))
-    reduced_labeled_data.append(np.array(A))
-reduced_labeled_data=np.array(reduced_labeled_data)
-dropout_local_2_batches=np.transpose(reduced_labeled_data)
-
-with h5py.File('pointcloud-c/dropout_global_4.h5', 'r') as f:
-    corrupted_data_file = f['data'] 
-    corrupted_label_file=f['label']
-    corrupted_dataset = corrupted_data_file[:] 
-    all_labels=corrupted_label_file[:]
-reduced_data_indices=[]
-reduced_data_labels=[]
-for j in label_list:
-    A=find_indices(all_labels,j)
-    reduced_data_indices.append(A)
-    reduced_data_labels.append(np.dot(np.ones(len(A)),j))
-reduced_labeled_data=[]
-for i in reduced_data_indices:
-    A=[]
-    for j in i:
-        A.append(labeled_data(corrupted_dataset[j],all_labels[j]))
-    reduced_labeled_data.append(np.array(A))
-reduced_labeled_data=np.array(reduced_labeled_data)
-dropout_global_batches=np.transpose(reduced_labeled_data)
-
-with h5py.File('pointcloud-c/jitter_4.h5', 'r') as f:
-    corrupted_data_file = f['data'] 
-    corrupted_label_file=f['label']
-    corrupted_dataset = corrupted_data_file[:] 
-    all_labels=corrupted_label_file[:]
-reduced_data_indices=[]
-reduced_data_labels=[]
-for j in label_list:
-    A=find_indices(all_labels,j)
-    reduced_data_indices.append(A)
-    reduced_data_labels.append(np.dot(np.ones(len(A)),j))
-np.shape(reduced_data_indices)
-reduced_labeled_data=[]
-for i in reduced_data_indices:
-    A=[]
-    for j in i:
-        A.append(labeled_data(corrupted_dataset[j],all_labels[j]))
-    reduced_labeled_data.append(np.array(A))
-reduced_labeled_data=np.array(reduced_labeled_data)
-jitter_batches=np.transpose(reduced_labeled_data)
-
-with h5py.File('pointcloud-c/add_global_4.h5', 'r') as f:
-    corrupted_data_file = f['data'] 
-    corrupted_label_file=f['label']
-    corrupted_dataset = corrupted_data_file[:] 
-    all_labels=corrupted_label_file[:]
-reduced_data_indices=[]
-reduced_data_labels=[]
-for j in label_list:
-    A=find_indices(all_labels,j)
-    reduced_data_indices.append(A)
-    reduced_data_labels.append(np.dot(np.ones(len(A)),j))
-np.shape(reduced_data_indices)
-reduced_labeled_data=[]
-for i in reduced_data_indices:
-    A=[]
-    for j in i:
-        A.append(labeled_data(corrupted_dataset[j],all_labels[j]))
-    reduced_labeled_data.append(np.array(A))
-reduced_labeled_data=np.array(reduced_labeled_data)
-add_global_batches=np.transpose(reduced_labeled_data)
-
-with h5py.File('pointcloud-c/add_local_4.h5', 'r') as f:
-    corrupted_data_file = f['data'] 
-    corrupted_label_file=f['label']
-    corrupted_dataset = corrupted_data_file[:] 
-    all_labels=corrupted_label_file[:]
-reduced_data_indices=[]
-reduced_data_labels=[]
-for j in label_list:
-    A=find_indices(all_labels,j)
-    reduced_data_indices.append(A)
-    reduced_data_labels.append(np.dot(np.ones(len(A)),j))
-reduced_labeled_data=[]
-for i in reduced_data_indices:
-    A=[]
-    for j in i:
-        A.append(labeled_data(corrupted_dataset[j],all_labels[j]))
-    reduced_labeled_data.append(np.array(A))
-reduced_labeled_data=np.array(reduced_labeled_data)
-add_local_batches=np.transpose(reduced_labeled_data)
-corrupted_batchlist=np.array([dropout_local_1_batches,dropout_local_2_batches,dropout_global_batches,jitter_batches,add_local_batches])
-corrupted_batchlist = corrupted_batchlist.transpose((0, 2, 1))
 
 #NN utilities: Functions for training pointnet.
 
@@ -316,7 +165,31 @@ def reset_weights(model):
                 init.constant_(m.bias, 0)
     model.apply(weights_init)
 
+#Data Preprocessing
 
+#The pointcloud corruptions are (in order): dropout_local_1, dropout_local_2, dropout_global_4, dropout_jitter_4, and add_global_4
+#The processed ''clean'' pointclodus are stored in ''batch_list''. The corrupted pointclouds are stored in ''corrupted_batch_list''.
+
+def load_data(file_path, label_list):
+    with h5py.File(file_path, 'r') as f:
+        data_file = f['data']
+        label_file = f['label']
+        dataset = data_file[:]
+        all_labels = label_file[:]
+    reduced_data_indices = [find_indices(all_labels, j) for j in label_list]
+    reduced_labeled_data = [[labeled_data(dataset[j], all_labels[j]) for j in indices] for indices in reduced_data_indices]
+    return np.transpose(np.array(reduced_labeled_data))
+
+def prepare_data():
+    batch_list = load_data('pointcloud-c/clean.h5', label_list)
+    corrupted_batchlist = np.array([
+        load_data('pointcloud-c/dropout_local_1.h5', label_list),
+        load_data('pointcloud-c/dropout_local_2.h5', label_list),
+        load_data('pointcloud-c/dropout_global_4.h5', label_list),
+        load_data('pointcloud-c/jitter_4.h5', label_list),
+        load_data('pointcloud-c/add_local_4.h5', label_list)
+    ]).transpose((0, 2, 1))
+    return batch_list, corrupted_batchlist
 ######
 #Classification using Sinkhorn, entropy-regularized and unregularized functionals
 #For ''benchmark_trial'', data=''batchlist'', corrupted_batches=''corrupted_batchlist'', m= # reference pointclouds
@@ -684,6 +557,8 @@ higheps_entropy_vec=[]
 unreg_vec=[]
 dreg_vec=[]
 nn_vec=[]
+
+batch_list,corrupted_batchlist=prepare_data()
 
 for i in np.arange(outer_trials):
     train_split,test_split,perm=test_train_split(batch_list)
