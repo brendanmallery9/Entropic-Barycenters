@@ -9,6 +9,8 @@ from torchvision import transforms, utils
 import plotly.graph_objects as go
 import plotly.express as px
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import matplotlib.cm as cm
 from sklearn.metrics import confusion_matrix
 from pathlib import Path
 import pandas as pd
@@ -29,7 +31,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 import h5py
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageOps
 import imageio
 import tensorflow as tf
 import scipy as sp
@@ -379,7 +381,7 @@ def produce_images(iters):
         plot_points_on_simplex(simplex_points,j_analysis_vecs,'{}'.format(j))
 
 #Creates gif from the set of images with title output_gif
-def create_pyramid_gif(dir1, dir2, output_gif='output.gif', duration=0.1, n=None):
+def create_pyramid_gif(dir1, dir2, output_gif='output.gif',image_coords=None, duration=0.1, n=None, border_size=10, colormap='viridis', box_size=(100, 100)):
     """
     Create a GIF that plays two image sequences side by side and save the last frame as a PNG.
 
@@ -388,6 +390,9 @@ def create_pyramid_gif(dir1, dir2, output_gif='output.gif', duration=0.1, n=None
     :param output_gif: Path to the output GIF file.
     :param duration: Duration of each frame in the GIF (in seconds).
     :param n: Number of images to use from each directory. If None, use all images.
+    :param border_size: Size of the white border to add around the images.
+    :param colormap: Colormap to apply to the images.
+    :param box_size: Size of the boxes for the images.
     """
     def numeric_sort_key(filepath):
         filename = os.path.basename(filepath)
@@ -411,12 +416,24 @@ def create_pyramid_gif(dir1, dir2, output_gif='output.gif', duration=0.1, n=None
             img1 = img1.resize((int(img1.size[0] * new_height / img1.size[1]), new_height))
             img2 = img2.resize((int(img2.size[0] * new_height / img2.size[1]), new_height))
 
+        # Add a white border around each image
+        img1 = ImageOps.expand(img1, border=border_size, fill='white')
+        img2 = ImageOps.expand(img2, border=border_size, fill='white')
+
         # Create a new image by concatenating img1 and img2 side by side
         new_img = Image.new('RGB', (img1.width + img2.width, img1.height))
         new_img.paste(img1, (0, 0))
         new_img.paste(img2, (img1.width, 0))
 
-        frames.append(new_img)
+        # Paste specified images at specified coordinates
+        if image_coords:
+            for (x, y, overlay_img) in image_coords:
+                overlay_img = overlay_img.resize(box_size)
+                new_img.paste(overlay_img, (x, y))
+
+
+
+            frames.append(new_img)
 
     # Convert duration from seconds to milliseconds
     duration_ms = int(duration * 1000)
@@ -430,13 +447,32 @@ def create_pyramid_gif(dir1, dir2, output_gif='output.gif', duration=0.1, n=None
         last_frame = frames[-1]
         last_frame.save(f'frame_{gif_length}.png')
 
+def apply_colormap(image, colormap):
+    normed_data = (image - np.min(image)) / (np.max(image) - np.min(image))
+    colormap = cm.get_cmap(colormap)
+    mapped_data = colormap(normed_data)
+    return (mapped_data[:, :, :3] * 255).astype(np.uint8)
+
 ####SCRIPT
 
 trial_list_unif = []
 simplex_points = generate_simplex_points(5)
+
 points1,mass1=image_to_empirical(ref_images[21])
 points2,mass2=image_to_empirical(ref_images[12])
 points3,mass3=image_to_empirical(ref_images[9])
+
+three_image=ref_images[21]
+zero_image=ref_images[12]
+four_image=ref_images[9]
+three_image_colored = apply_colormap(three_image, 'viridis')
+zero_image_colored = apply_colormap(zero_image, 'viridis')
+four_image_colored = apply_colormap(four_image, 'viridis')
+three_image_pil = Image.fromarray(three_image_colored)
+zero_image_pil = Image.fromarray(zero_image_colored)
+four_image_pil = Image.fromarray(four_image_colored)
+
+
 ref_indices = [9, 12, 21]
 selected_ref_images=[]
 for j in ref_indices:
@@ -447,17 +483,14 @@ for j in ref_indices:
     selected_ref_images.append(ref_image)
 
 
-
-
-
-
 # Produces synthesis and analysis data run for #iterations and saves them in directories
 
-iterations = np.arange(300)
+iterations = np.arange(1000)
 base_dir = ''
 i_range = range(21) 
 j_range=iterations
 n_divisions = 5
+'''
 for lam in simplex_points:
     try:
         index_of_lam = np.where(np.all(simplex_points == lam, axis=1))[0][0]
@@ -480,16 +513,17 @@ for lam in simplex_points:
         # Skip this lambda if there's an error and move to the next one
         continue
 
-
+'''
 
 
 #Produces a gif visualizing the evolution of the synthesis and analysis algorithms
 #Saves the last frame as an .png
 gif_length = len(iterations)  # Number of images to use in gif (default uses all images produced)
-produce_images(gif_length)
+#produce_images(gif_length)
 output_gif = 'output.gif'
 dir1 = 'gif_folder/analysis_images'
 dir2 = 'gif_folder/synth_images'
-create_pyramid_gif(dir1,dir2, output_gif, duration=.2, n=gif_length)
+image_coords = [(261, 18, three_image_pil), (25, 450, zero_image_pil), (498, 450, four_image_pil)]
 
+create_pyramid_gif(dir1, dir2, output_gif, image_coords=image_coords, border_size=80, box_size=(55, 55))
 
